@@ -91,7 +91,7 @@ Local Git work completed:
 - Configured local Git author as `lixiang-moss`.
 - Created the first commit: `Initial disk history project`.
 
-GitHub sync was attempted but did not complete because GitHub CLI is not logged in on this machine:
+GitHub sync was first attempted but did not complete because GitHub CLI was not logged in on this machine:
 
 ```text
 gh auth status
@@ -107,3 +107,11 @@ gh repo create lixiang-moss/disk-history --public --source . --remote origin --p
 ```
 
 No local development work is blocked by this. The project is committed locally and ready to push after authentication.
+
+After the user completed GitHub CLI authentication, the public repository was created:
+
+```text
+https://github.com/lixiang-moss/disk-history
+```
+
+The repository uses `main` as the default branch and `origin` as the remote name.
