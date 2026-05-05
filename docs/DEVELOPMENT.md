@@ -82,3 +82,28 @@ Notes:
 - The settings file was created under `%LOCALAPPDATA%\DiskHistory\settings.json`.
 - These generated runtime files are outside the repository and are also covered by `.gitignore` patterns if copied into the repo by mistake.
 - Git is installed, but the current terminal did not refresh PATH automatically. The project uses the installed Git executable directly until a new terminal session sees Git normally.
+
+## 2026-05-06: GitHub Sync Status
+
+Local Git work completed:
+
+- Initialized the repository on branch `main`.
+- Configured local Git author as `lixiang-moss`.
+- Created the first commit: `Initial disk history project`.
+
+GitHub sync was attempted but did not complete because GitHub CLI is not logged in on this machine:
+
+```text
+gh auth status
+You are not logged into any GitHub hosts.
+```
+
+The connected GitHub app can identify the account, but the available tool set does not include creating a brand-new repository. The stable next step is to authenticate GitHub CLI after the user is awake:
+
+```powershell
+gh auth login
+cd D:\agenthome\disk-history
+gh repo create lixiang-moss/disk-history --public --source . --remote origin --push
+```
+
+No local development work is blocked by this. The project is committed locally and ready to push after authentication.
