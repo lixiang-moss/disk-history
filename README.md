@@ -1,37 +1,38 @@
 # Disk History
 
-Disk History is a local-first desktop tool for tracking disk size changes over time. It is designed to help answer questions like:
+Disk History 是一个本地优先的桌面工具，用来记录磁盘空间随时间发生的变化。它的目标是帮你回答这类问题：
 
-- Why did my system drive grow today?
-- Which folders changed the most in the last few hours?
-- Which changes are likely downloads, temporary files, development dependencies, or software updates?
+- 今天系统盘为什么变大了？
+- 最近几个小时哪些目录增长最多？
+- 增长大概率来自下载、临时文件、开发依赖、软件安装，还是系统更新？
 
-The first version targets Windows and uses Python.
+第一版以 Windows 为主要目标平台，使用 Python 开发。
 
-## Current Status
+## 当前状态
 
-This project is in early development. The current implementation provides:
+项目处于早期开发阶段。当前版本已经具备：
 
-- A PySide6 desktop shell.
-- SQLite storage under the current user's local app data folder.
-- Default monitor rules based on portable path templates such as `{USERPROFILE}` and `{LOCALAPPDATA}`.
-- One-time directory snapshot scanning.
-- Basic file event recording through `watchdog`.
-- Privacy modes for detailed, summary-only, and ignored paths.
+- PySide6 桌面界面骨架。
+- SQLite 本地数据库，默认存放在当前用户的本地应用数据目录。
+- 基于通用路径模板的默认监控规则，例如 `{USERPROFILE}` 和 `{LOCALAPPDATA}`，不会写死某一台电脑的个人路径。
+- 单次目录快照扫描。
+- 基于 `watchdog` 的基础文件变化记录。
+- 详细记录、汇总记录、忽略三种隐私模式。
+- 可编辑的本地配置文件。
 
-## Privacy Model
+## 隐私模型
 
-Disk History is designed to run locally.
+Disk History 按本地工具设计。
 
-- It does not upload data.
-- It does not record file contents.
-- It does not automatically delete files.
-- Sensitive paths can be configured to record only summary-level size changes.
-- Local databases and logs are ignored by Git through `.gitignore`.
+- 不上传数据。
+- 不记录文件内容。
+- 不自动删除文件。
+- 敏感目录可以配置为只记录汇总变化，不记录具体文件名。
+- 本地数据库、日志和导出文件已经通过 `.gitignore` 排除，避免误提交到 Git。
 
-The local database may still contain file paths depending on your privacy settings. Do not upload generated `.db`, `.sqlite`, log, or export files.
+请注意：如果你把某些目录设置成详细记录，本地数据库仍可能包含文件路径。不要上传生成的 `.db`、`.sqlite`、日志或导出文件。
 
-## Quick Start
+## 快速开始
 
 ```powershell
 cd D:\agenthome\disk-history
@@ -42,15 +43,16 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m disk_history gui
 ```
 
-The `config-path` command creates and prints the local editable settings file. Monitor rules use templates like `{USERPROFILE}` and `{LOCALAPPDATA}` so the project is not tied to one person's computer.
+`config-path` 命令会创建并显示本地可编辑配置文件。监控规则使用 `{USERPROFILE}`、`{LOCALAPPDATA}` 这类路径模板，因此项目不会绑定到某个用户的电脑路径。
 
-## Development Documents
+## 开发文档
 
-- [Development Notes](docs/DEVELOPMENT.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Security](docs/SECURITY.md)
-- [Roadmap](docs/ROADMAP.md)
+- [开发记录](docs/DEVELOPMENT.md)
+- [架构说明](docs/ARCHITECTURE.md)
+- [安全与隐私](docs/SECURITY.md)
+- [路线图](docs/ROADMAP.md)
 
-## License
+## 许可证
 
-MIT
+本项目使用 MIT 许可证。`LICENSE` 文件保留 MIT 官方英文原文，便于 GitHub 和其他工具正确识别许可证。
+

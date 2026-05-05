@@ -1,49 +1,57 @@
-# Architecture
+# 架构说明
 
-Disk History is split into small modules so each part is easy to understand.
+Disk History 被拆分成多个小模块，方便新手理解每一部分的职责。
 
-## Main Flow
+## 主流程
 
 ```text
-Monitor rules
-  -> path template expansion
-  -> privacy classification
-  -> file watcher events and directory snapshots
-  -> SQLite database
-  -> desktop UI and CLI queries
+监控规则
+  -> 路径模板展开
+  -> 隐私规则判断
+  -> 文件监听事件和目录快照
+  -> SQLite 本地数据库
+  -> 桌面界面和命令行查询
 ```
 
-## Modules
+## 模块职责
 
-- `config.py`: default monitor rules, privacy rules, and app data paths.
-- `privacy.py`: decides whether a path is detailed, summary-only, or ignored.
-- `database.py`: creates and writes the SQLite database.
-- `scanner.py`: calculates directory sizes for snapshot history.
-- `settings.py`: creates and reads the local editable settings file.
-- `watcher.py`: records live filesystem events through watchdog.
-- `app.py`: PySide6 desktop interface.
-- `cli.py`: command-line entry points for scanning, watching, and opening the UI.
+- `config.py`：默认监控规则、默认忽略规则、应用数据目录和路径模板展开。
+- `privacy.py`：判断某个路径应该详细记录、汇总记录，还是完全忽略。
+- `database.py`：创建 SQLite 表结构，并负责写入和读取历史数据。
+- `scanner.py`：计算目录大小，用于生成目录快照。
+- `settings.py`：创建和读取本地可编辑配置文件。
+- `watcher.py`：通过 `watchdog` 监听实时文件变化。
+- `app.py`：PySide6 桌面界面。
+- `cli.py`：命令行入口，用于扫描、监听、打开界面等操作。
 
-## Data Storage
+## 数据存放位置
 
-Runtime data is stored outside the repository:
+运行时数据不放在项目源码目录，而是放在当前用户的本地应用数据目录：
 
 ```text
 %LOCALAPPDATA%\DiskHistory\
 ```
 
-The default database path is:
+默认数据库路径：
 
 ```text
 %LOCALAPPDATA%\DiskHistory\disk_history.sqlite3
 ```
 
-This database is local user data and must not be committed to Git.
+这个数据库属于本地隐私数据，不能提交到 Git。
 
-The default settings path is:
+默认配置文件路径：
 
 ```text
 %LOCALAPPDATA%\DiskHistory\settings.json
 ```
 
-This file stores path templates and privacy modes. It should remain local because users may customize it.
+这个文件保存监控路径模板和隐私模式。用户可以修改它来改变监控范围和记录粒度。
+
+## 第一版技术取舍
+
+- 使用 Python 是为了降低入门难度，并让功能更快跑通。
+- 使用 `watchdog` 是为了先实现可理解、可测试的文件变化监听。
+- 使用 SQLite 是因为它不需要单独安装数据库服务，适合本地桌面工具。
+- 暂不使用 C++ 或 NTFS USN Journal，避免第一版过早进入复杂的 Windows 底层开发。
+

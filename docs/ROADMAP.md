@@ -1,38 +1,38 @@
-# Roadmap
+# 路线图
 
-## Version 0.1
+## 0.1 版本
 
-- Project skeleton.
-- Desktop UI.
-- SQLite database.
-- Default monitor rules.
-- Directory snapshot scanning.
-- Basic watchdog event recording.
-- Privacy modes.
-- Tests.
+- 创建标准项目骨架。
+- 实现桌面界面。
+- 接入 SQLite 本地数据库。
+- 提供默认监控规则。
+- 支持目录快照扫描。
+- 支持基础 `watchdog` 文件事件记录。
+- 提供隐私模式。
+- 编写自动化测试。
 
-## Version 0.2
+## 0.2 版本
 
-- Better dashboard summaries.
-- Time range filters.
-- Rule editing in the UI.
-- Exportable reports with private paths redacted.
-- Clearer cleanup suggestions without deleting files.
+- 改进总览页统计。
+- 增加时间范围筛选。
+- 在界面里编辑监控规则。
+- 导出报告时支持隐藏私人路径。
+- 提供更清楚的清理建议，但仍不自动删除文件。
 
-## Version 0.3
+## 0.3 版本
 
-- Windows startup option.
-- Background tray mode.
-- More reliable event batching.
-- Optional database encryption.
+- 支持 Windows 开机启动选项。
+- 增加后台托盘模式。
+- 改进事件合并和降噪能力。
+- 考虑可选数据库加密。
 
-## Future C++ / Windows Module
+## 未来的 C++ / Windows 原生模块
 
-Consider a C++ or Rust native module only after the Python version proves the product behavior.
+只有在 Python 版本已经验证产品逻辑后，才考虑加入 C++ 或其他原生模块。
 
-Possible goals:
+可能目标：
 
-- NTFS USN Journal support.
-- Better performance on large directory trees.
-- More accurate low-level filesystem change tracking.
+- 支持 NTFS USN Journal。
+- 在大型目录树上提升性能。
+- 提高底层文件变化追踪的准确性。
 

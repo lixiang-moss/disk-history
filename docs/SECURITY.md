@@ -1,50 +1,50 @@
-# Security and Privacy
+# 安全与隐私
 
-Disk History should be safe by default for a personal local tool and for future open-source use.
+Disk History 是个人本地工具，也计划未来开源。因此安全设计的重点是：默认不收集过多信息，不上传数据，不误提交隐私文件。
 
-## What The Tool Records
+## 工具会记录什么
 
-Depending on privacy settings, it may record:
+根据隐私设置，工具可能记录：
 
-- File or directory path metadata.
-- File sizes.
-- Time of change.
-- Event type such as created, modified, deleted, or moved.
-- Directory snapshot size.
-- A human-readable category such as Downloads or Temp.
+- 文件或目录路径元数据。
+- 文件大小。
+- 变化时间。
+- 事件类型，例如新增、修改、删除、移动。
+- 目录快照大小。
+- 易读的分类名称，例如 Downloads 或 Temp。
 
-## What The Tool Does Not Record
+## 工具不会记录什么
 
-The first version does not record:
+第一版不会记录：
 
-- File contents.
-- Document text.
-- Image contents.
-- Browser history.
-- Chat contents.
-- Passwords, tokens, or secrets.
+- 文件内容。
+- 文档正文。
+- 图片内容。
+- 浏览器历史。
+- 聊天内容。
+- 密码、token、密钥等敏感内容。
 
-## Privacy Modes
+## 隐私模式
 
-- Detailed: record the concrete path and size metadata.
-- Summary: record only the configured rule label and aggregate size metadata.
-- Ignore: do not record the event.
+- 详细记录：保存具体路径和大小变化元数据。
+- 汇总记录：只保存配置规则名称和汇总大小信息，不保存具体文件名。
+- 忽略：完全不记录该路径的事件。
 
-Sensitive user folders should default to summary mode.
+敏感用户目录默认应使用汇总记录。
 
-## User Configuration
+## 用户配置
 
-The app creates a local editable settings file:
+应用会创建本地可编辑配置文件：
 
 ```text
 %LOCALAPPDATA%\DiskHistory\settings.json
 ```
 
-Rules use path templates such as `{USERPROFILE}` instead of personal absolute paths. Users can change privacy modes without editing source code.
+规则使用 `{USERPROFILE}` 这类路径模板，而不是某个用户电脑上的绝对路径。用户可以在不改源码的情况下调整隐私模式。
 
-## GitHub Safety Rules
+## GitHub 安全规则
 
-Never commit generated local data:
+绝对不要提交生成的本地数据：
 
 - `*.db`
 - `*.sqlite`
@@ -53,10 +53,11 @@ Never commit generated local data:
 - `*.db-shm`
 - `logs/`
 - `exports/`
-- local config files
+- 本地配置文件
 
-These patterns are included in `.gitignore`.
+这些模式已经写进 `.gitignore`。
 
-## Cleanup Safety
+## 清理安全
 
-The first version does not delete files. Future cleanup features must require explicit user confirmation.
+第一版不会删除任何文件。未来如果加入清理功能，也必须要求用户明确确认。
+
