@@ -19,11 +19,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab.settings": "设置",
         "button.scan_once": "扫描一次",
         "button.refresh": "刷新",
+        "button.start_monitoring": "开始实时监听",
+        "button.stop_monitoring": "停止实时监听",
         "button.clear_history": "清空本地历史",
         "label.local_database": "本地数据库：{path}",
         "label.data_folder": "数据目录：{path}",
         "label.settings_file": "配置文件：{path}",
         "label.monitor_total": "当前监控规则：{count} 个",
+        "label.monitor_status_stopped": "实时监听：未运行",
+        "label.monitor_status_running": "实时监听：运行中，正在监听 {count} 个目录",
+        "label.monitor_status_error": "实时监听启动失败：{message}",
         "label.snapshot_total": "最新快照总大小：{size}",
         "label.latest_scan": "最近快照时间：{time}",
         "label.no_scan": "还没有快照数据，请先点击“扫描一次”。",
@@ -82,11 +87,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab.settings": "Settings",
         "button.scan_once": "Scan Once",
         "button.refresh": "Refresh",
+        "button.start_monitoring": "Start Live Monitoring",
+        "button.stop_monitoring": "Stop Live Monitoring",
         "button.clear_history": "Clear Local History",
         "label.local_database": "Local database: {path}",
         "label.data_folder": "Data folder: {path}",
         "label.settings_file": "Settings file: {path}",
         "label.monitor_total": "Monitor rules: {count}",
+        "label.monitor_status_stopped": "Live monitoring: stopped",
+        "label.monitor_status_running": "Live monitoring: running, watching {count} folders",
+        "label.monitor_status_error": "Failed to start live monitoring: {message}",
         "label.snapshot_total": "Latest snapshot total: {size}",
         "label.latest_scan": "Latest snapshot time: {time}",
         "label.no_scan": "No snapshot data yet. Click Scan Once first.",
@@ -161,4 +171,3 @@ def missing_translation_keys() -> dict[str, set[str]]:
         for language, entries in TRANSLATIONS.items()
         if all_keys - set(entries.keys())
     }
-

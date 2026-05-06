@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from threading import Thread
 
 from disk_history.database import DiskHistoryDatabase, FileEvent
 
@@ -27,3 +28,28 @@ def test_database_inserts_and_reads_event(tmp_path):
     assert rows[0]["delta_bytes"] == 10
     db.close()
 
+
+def test_database_accepts_background_thread_writes(tmp_path):
+    db = DiskHistoryDatabase(tmp_path / "threaded.sqlite3")
+    db.initialize()
+
+    def write_event() -> None:
+        db.insert_event(
+            FileEvent(
+                happened_at=datetime(2026, 5, 6, tzinfo=UTC),
+                event_type="created",
+                privacy_mode="detailed",
+                category="Thread",
+                display_path="threaded.bin",
+                path="threaded.bin",
+                size_after=1,
+                delta_bytes=1,
+            )
+        )
+
+    thread = Thread(target=write_event)
+    thread.start()
+    thread.join()
+
+    assert db.recent_events()[0]["category"] == "Thread"
+    db.close()

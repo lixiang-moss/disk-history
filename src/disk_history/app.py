@@ -13,7 +13,7 @@ from PySide6.QtCharts import (
     QPieSeries,
     QValueAxis,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -44,6 +44,7 @@ from disk_history.database import DiskHistoryDatabase
 from disk_history.i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 from disk_history.scanner import capture_snapshots, format_bytes
 from disk_history.settings import load_settings, save_settings, settings_path
+from disk_history.watcher import DiskHistoryWatcher
 
 
 class MainWindow(QMainWindow):
@@ -55,6 +56,10 @@ class MainWindow(QMainWindow):
         self.database.initialize()
         self.settings = load_settings()
         self.language = normalize_language(self.settings.language)
+        self.watcher: DiskHistoryWatcher | None = None
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.setInterval(3000)
+        self.refresh_timer.timeout.connect(self.refresh_all)
 
         self._build_ui()
         self.refresh_all()
@@ -79,16 +84,24 @@ class MainWindow(QMainWindow):
 
         self.status_label = QLabel()
         self.summary_label = QLabel()
+        self.monitor_status_label = QLabel()
         layout.addWidget(self.status_label)
         layout.addWidget(self.summary_label)
+        layout.addWidget(self.monitor_status_label)
 
         actions = QHBoxLayout()
         self.scan_button = QPushButton(self.t("button.scan_once"))
         self.scan_button.clicked.connect(self.scan_once)
         self.refresh_button = QPushButton(self.t("button.refresh"))
         self.refresh_button.clicked.connect(self.refresh_all)
+        self.start_monitor_button = QPushButton(self.t("button.start_monitoring"))
+        self.start_monitor_button.clicked.connect(self.start_monitoring)
+        self.stop_monitor_button = QPushButton(self.t("button.stop_monitoring"))
+        self.stop_monitor_button.clicked.connect(self.stop_monitoring)
         actions.addWidget(self.scan_button)
         actions.addWidget(self.refresh_button)
+        actions.addWidget(self.start_monitor_button)
+        actions.addWidget(self.stop_monitor_button)
         actions.addStretch(1)
         layout.addLayout(actions)
 
@@ -221,6 +234,35 @@ class MainWindow(QMainWindow):
         self.database.insert_snapshots(snapshots)
         self.refresh_all()
 
+    def start_monitoring(self) -> None:
+        if self.watcher and self.watcher.is_running:
+            self.refresh_all()
+            return
+
+        self.settings = load_settings()
+        self.watcher = DiskHistoryWatcher(
+            self.database,
+            self.settings.monitor_rules,
+            self.settings.ignore_patterns,
+        )
+        try:
+            self.watcher.start()
+        except RuntimeError as exc:
+            self.monitor_status_label.setText(
+                self.t("label.monitor_status_error", message=str(exc))
+            )
+            self.watcher = None
+            return
+
+        self.refresh_timer.start()
+        self.refresh_all()
+
+    def stop_monitoring(self) -> None:
+        if self.watcher:
+            self.watcher.stop()
+        self.refresh_timer.stop()
+        self.refresh_all()
+
     def refresh_all(self) -> None:
         snapshots = self.database.latest_snapshots()
         events = self.database.recent_events(limit=2000)
@@ -239,6 +281,17 @@ class MainWindow(QMainWindow):
                     ]
                 )
             )
+
+        if self.watcher and self.watcher.is_running:
+            self.monitor_status_label.setText(
+                self.t("label.monitor_status_running", count=len(self.watcher.targets))
+            )
+            self.start_monitor_button.setEnabled(False)
+            self.stop_monitor_button.setEnabled(True)
+        else:
+            self.monitor_status_label.setText(self.t("label.monitor_status_stopped"))
+            self.start_monitor_button.setEnabled(True)
+            self.stop_monitor_button.setEnabled(False)
 
         self._refresh_snapshots(snapshots)
         self._refresh_events(events)
@@ -420,6 +473,11 @@ class MainWindow(QMainWindow):
         if result == QMessageBox.Yes:
             self.database.clear_history()
             self.refresh_all()
+
+    def closeEvent(self, event) -> None:
+        self.stop_monitoring()
+        self.database.close()
+        event.accept()
 
     def _empty_chart(self, title: str) -> QChart:
         chart = QChart()

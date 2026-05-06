@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler, FileSystemMovedEvent
 from watchdog.observers import Observer
 
-from disk_history.config import DEFAULT_MONITOR_RULES, MonitorRule
+from disk_history.config import DEFAULT_IGNORE_PATTERNS, DEFAULT_MONITOR_RULES, MonitorRule
 from disk_history.database import DiskHistoryDatabase, FileEvent, utc_now
-from disk_history.config import DEFAULT_IGNORE_PATTERNS
 from disk_history.privacy import IGNORE, SUMMARY, PrivacyPolicy
+
+
+@dataclass(frozen=True)
+class WatchTarget:
+    rule_name: str
+    path: Path
+    recursive: bool
 
 
 class DiskHistoryEventHandler(FileSystemEventHandler):
@@ -90,6 +97,52 @@ class DiskHistoryEventHandler(FileSystemEventHandler):
         )
 
 
+class DiskHistoryWatcher:
+    def __init__(
+        self,
+        database: DiskHistoryDatabase,
+        monitor_rules: tuple[MonitorRule, ...] = DEFAULT_MONITOR_RULES,
+        ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE_PATTERNS,
+    ) -> None:
+        self.database = database
+        self.monitor_rules = monitor_rules
+        self.ignore_patterns = ignore_patterns
+        self.observer: Observer | None = None
+        self.targets: list[WatchTarget] = []
+
+    @property
+    def is_running(self) -> bool:
+        return self.observer is not None and self.observer.is_alive()
+
+    def start(self) -> list[WatchTarget]:
+        if self.is_running:
+            return self.targets
+
+        privacy_policy = PrivacyPolicy(self.monitor_rules, self.ignore_patterns)
+        handler = DiskHistoryEventHandler(self.database, privacy_policy)
+        observer = Observer()
+        targets = watch_targets(self.monitor_rules)
+
+        for target in targets:
+            observer.schedule(handler, str(target.path), recursive=target.recursive)
+
+        if not targets:
+            raise RuntimeError("No configured monitor paths exist on this system.")
+
+        observer.start()
+        self.observer = observer
+        self.targets = targets
+        return targets
+
+    def stop(self) -> None:
+        if self.observer is None:
+            return
+        self.observer.stop()
+        self.observer.join(timeout=5)
+        self.observer = None
+        self.targets = []
+
+
 def safe_size(path: Path) -> int | None:
     try:
         if path.is_file():
@@ -99,31 +152,28 @@ def safe_size(path: Path) -> int | None:
     return None
 
 
-def run_watcher(
-    database: DiskHistoryDatabase,
+def watch_targets(
     monitor_rules: tuple[MonitorRule, ...] = DEFAULT_MONITOR_RULES,
-    ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE_PATTERNS,
-) -> None:
-    privacy_policy = PrivacyPolicy(monitor_rules, ignore_patterns)
-    handler = DiskHistoryEventHandler(database, privacy_policy)
-    observer = Observer()
-
-    watched = 0
+) -> list[WatchTarget]:
+    targets: list[WatchTarget] = []
     for rule in monitor_rules:
         if not rule.enabled:
             continue
         path = rule.resolved_path()
         if path.exists():
-            observer.schedule(handler, str(path), recursive=rule.recursive)
-            watched += 1
+            targets.append(WatchTarget(rule.name, path, rule.recursive))
+    return targets
 
-    if watched == 0:
-        raise RuntimeError("No configured monitor paths exist on this system.")
 
-    observer.start()
+def run_watcher(
+    database: DiskHistoryDatabase,
+    monitor_rules: tuple[MonitorRule, ...] = DEFAULT_MONITOR_RULES,
+    ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE_PATTERNS,
+) -> None:
+    watcher = DiskHistoryWatcher(database, monitor_rules, ignore_patterns)
+    watcher.start()
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+        watcher.stop()
