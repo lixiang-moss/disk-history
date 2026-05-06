@@ -10,6 +10,7 @@ def test_load_settings_creates_default_config(monkeypatch, tmp_path):
 
     assert settings.monitor_rules
     assert settings.ignore_patterns
+    assert settings.language == "zh-CN"
     assert settings_path().exists()
 
 
@@ -28,6 +29,7 @@ def test_load_settings_reads_monitor_rules(monkeypatch, tmp_path):
                     }
                 ],
                 "ignore_patterns": ["*.tmp"],
+                "language": "en",
             }
         ),
         encoding="utf-8",
@@ -38,3 +40,23 @@ def test_load_settings_reads_monitor_rules(monkeypatch, tmp_path):
     assert settings.monitor_rules[0].name == "Example"
     assert settings.monitor_rules[0].recursive is False
     assert settings.ignore_patterns == ("*.tmp",)
+    assert settings.language == "en"
+
+
+def test_load_settings_migrates_missing_language(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    settings_path().write_text(
+        json.dumps(
+            {
+                "monitor_rules": [],
+                "ignore_patterns": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(create_if_missing=True)
+    raw = json.loads(settings_path().read_text(encoding="utf-8"))
+
+    assert settings.language == "zh-CN"
+    assert raw["language"] == "zh-CN"

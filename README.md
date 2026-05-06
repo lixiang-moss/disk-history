@@ -12,13 +12,14 @@ Disk History 是一个本地优先的桌面工具，用来记录磁盘空间随�
 
 项目处于早期开发阶段。当前版本已经具备：
 
-- PySide6 桌面界面骨架。
+- PySide6 桌面界面，默认中文，并支持切换 English。
 - SQLite 本地数据库，默认存放在当前用户的本地应用数据目录。
 - 基于通用路径模板的默认监控规则，例如 `{USERPROFILE}` 和 `{LOCALAPPDATA}`，不会写死某一台电脑的个人路径。
 - 单次目录快照扫描。
 - 基于 `watchdog` 的基础文件变化记录。
 - 详细记录、汇总记录、忽略三种隐私模式。
 - 可编辑的本地配置文件。
+- 目录占用排行、变化时间线、来源占比、活动热力图、清理建议等可视化视图。
 
 ## 隐私模型
 
@@ -34,16 +35,49 @@ Disk History 按本地工具设计。
 
 ## 快速开始
 
+下面这些命令适合从源码运行当前开发版。它们不会上传数据，也不会自动删除磁盘上的文件。
+
+进入项目目录：
+
 ```powershell
 cd D:\agenthome\disk-history
+```
+
+创建本项目专用的 Python 虚拟环境。这样依赖会装在项目目录下的 `.venv`，不会混进系统 Python：
+
+```powershell
 python -m venv .venv
+```
+
+安装项目运行和开发所需依赖：
+
+```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+创建并显示本地配置文件路径。配置文件默认在 `%LOCALAPPDATA%\DiskHistory\settings.json`，用于保存监控规则、隐私模式和界面语言：
+
+```powershell
 .\.venv\Scripts\python.exe -m disk_history config-path
+```
+
+执行一次目录扫描，把默认监控目录的当前大小写入本地 SQLite 数据库：
+
+```powershell
 .\.venv\Scripts\python.exe -m disk_history scan
+```
+
+打开桌面图形界面，用图表和表格查看扫描结果、时间线、来源占比、活动热力图和清理建议：
+
+```powershell
 .\.venv\Scripts\python.exe -m disk_history gui
 ```
 
-`config-path` 命令会创建并显示本地可编辑配置文件。监控规则使用 `{USERPROFILE}`、`{LOCALAPPDATA}` 这类路径模板，因此项目不会绑定到某个用户的电脑路径。
+这些命令会生成本地运行数据，例如 SQLite 数据库和配置文件。它们位于 `%LOCALAPPDATA%\DiskHistory\`，不会被提交到 GitHub。
+
+## 界面语言
+
+桌面界面默认使用中文。可以在“设置”页切换为 English，选择后会保存到本地配置文件。
 
 ## 开发文档
 
@@ -55,4 +89,3 @@ python -m venv .venv
 ## 许可证
 
 本项目使用 MIT 许可证。`LICENSE` 文件保留 MIT 官方英文原文，便于 GitHub 和其他工具正确识别许可证。
-
