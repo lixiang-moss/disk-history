@@ -31,6 +31,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.choose_rule_directory": "选择监控目录...",
         "button.apply_time_range": "应用时间范围",
         "button.scan_drilldown": "扫描子目录",
+        "button.export_report": "导出调查报告",
         "label.product_focus": "定位：记录磁盘空间变化证据，帮助你自己分析原因。",
         "label.snapshot_evidence": "快照对比证据",
         "label.event_evidence": "文件事件辅助线索（最近 2 小时）",
@@ -71,6 +72,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.drilldown_done": "已列出 {count} 项。",
         "label.directory": "目录",
         "label.file": "文件",
+        "label.redact_report_paths": "导出时隐藏常见私人路径",
+        "label.report_exported": "已导出：{path}",
         "label.privacy_intro": (
             "Disk History 只记录元数据。\n\n"
             "详细记录：保存具体路径和大小变化。\n"
@@ -126,6 +129,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "dialog.choose_log_directory": "选择日志目录",
         "dialog.choose_monitor_directory": "选择监控目录",
+        "dialog.export_report": "导出调查报告",
     },
     "en": {
         "app.title": "Disk History",
@@ -149,6 +153,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.choose_rule_directory": "Choose Monitor Folder...",
         "button.apply_time_range": "Apply Time Range",
         "button.scan_drilldown": "Scan Children",
+        "button.export_report": "Export Report",
         "label.product_focus": "Focus: record disk space evidence so you can analyze the cause.",
         "label.snapshot_evidence": "Snapshot Comparison Evidence",
         "label.event_evidence": "File Event Clues (Last 2 Hours)",
@@ -189,6 +194,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.drilldown_done": "Listed {count} items.",
         "label.directory": "Directory",
         "label.file": "File",
+        "label.redact_report_paths": "Hide common private paths when exporting",
+        "label.report_exported": "Exported: {path}",
         "label.privacy_intro": (
             "Disk History records metadata only.\n\n"
             "Detailed mode stores concrete paths and size changes.\n"
@@ -246,6 +253,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "dialog.choose_log_directory": "Choose Log Directory",
         "dialog.choose_monitor_directory": "Choose Monitor Folder",
+        "dialog.export_report": "Export Investigation Report",
     },
 }
 

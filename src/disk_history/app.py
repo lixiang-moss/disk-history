@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from PySide6.QtCharts import (
     QBarCategoryAxis,
@@ -53,6 +54,7 @@ from disk_history.database import DiskHistoryDatabase
 from disk_history.i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 from disk_history.notifications import TrayNotifier
 from disk_history.privacy import DETAILED, IGNORE, SUMMARY
+from disk_history.reports import build_investigation_report, default_report_path, write_report
 from disk_history.scanner import capture_snapshots, child_size_rankings, format_bytes
 from disk_history.settings import load_settings, resolved_log_directory, save_settings, settings_path
 from disk_history.startup import (
@@ -190,6 +192,18 @@ class MainWindow(QMainWindow):
         custom_range_row.addWidget(self.custom_range_status_label)
         custom_range_row.addStretch(1)
         layout.addLayout(custom_range_row)
+
+        report_row = QHBoxLayout()
+        self.redact_report_paths_check = QCheckBox(self.t("label.redact_report_paths"))
+        self.redact_report_paths_check.setChecked(True)
+        self.export_report_button = QPushButton(self.t("button.export_report"))
+        self.export_report_button.clicked.connect(self.export_investigation_report)
+        self.report_status_label = QLabel()
+        report_row.addWidget(self.redact_report_paths_check)
+        report_row.addWidget(self.export_report_button)
+        report_row.addWidget(self.report_status_label)
+        report_row.addStretch(1)
+        layout.addLayout(report_row)
 
         drilldown_row = QHBoxLayout()
         self.drilldown_rule_combo = QComboBox()
@@ -617,6 +631,34 @@ class MainWindow(QMainWindow):
                 self.drilldown_table.setItem(row_index, column, item)
         self.drilldown_table.resizeColumnsToContents()
         self.drilldown_status_label.setText(self.t("label.drilldown_done", count=len(rows)))
+
+    def export_investigation_report(self) -> None:
+        snapshot_rows = self.database.snapshot_history()
+        if self.custom_investigation_range is not None:
+            start_at, end_at = self.custom_investigation_range
+        else:
+            windows = investigation_windows(snapshot_rows)
+            start_at, end_at = windows[1].start_at, windows[1].end_at
+
+        event_rows = self.database.events_between(start_at, end_at, limit=1000)
+        content = build_investigation_report(
+            snapshot_rows,
+            event_rows,
+            start_at=start_at,
+            end_at=end_at,
+            redact_private_paths=self.redact_report_paths_check.isChecked(),
+        )
+        default_path = default_report_path(app_data_dir())
+        selected, _filter = QFileDialog.getSaveFileName(
+            self,
+            self.t("dialog.export_report"),
+            str(default_path),
+            "Markdown (*.md)",
+        )
+        if not selected:
+            return
+        write_report(Path(selected), content)
+        self.report_status_label.setText(self.t("label.report_exported", path=selected))
 
     def _refresh_directory_chart(self, rows) -> None:
         rankings = directory_rankings(rows)
