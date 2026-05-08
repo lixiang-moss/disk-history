@@ -17,6 +17,16 @@ class DirectorySize:
     error_count: int
 
 
+@dataclass(frozen=True)
+class ChildSize:
+    name: str
+    path: Path
+    is_directory: bool
+    size_bytes: int
+    file_count: int
+    error_count: int
+
+
 def directory_size(path: Path, excluded_roots: tuple[Path, ...] = ()) -> DirectorySize:
     if is_path_excluded(path, excluded_roots):
         return DirectorySize(False, 0, 0, 0)
@@ -82,6 +92,40 @@ def capture_snapshots(
         )
 
     return snapshots
+
+
+def child_size_rankings(
+    path: Path,
+    excluded_roots: tuple[Path, ...] = (),
+    *,
+    limit: int = 50,
+) -> list[ChildSize]:
+    if is_path_excluded(path, excluded_roots) or not path.exists() or not path.is_dir():
+        return []
+
+    children: list[ChildSize] = []
+    try:
+        entries = sorted(path.iterdir(), key=lambda item: item.name.lower())
+    except OSError:
+        return []
+
+    for entry in entries:
+        if is_path_excluded(entry, excluded_roots):
+            continue
+        result = directory_size(entry, excluded_roots)
+        children.append(
+            ChildSize(
+                name=entry.name,
+                path=entry,
+                is_directory=entry.is_dir(),
+                size_bytes=result.size_bytes,
+                file_count=result.file_count,
+                error_count=result.error_count,
+            )
+        )
+
+    children.sort(key=lambda item: item.size_bytes, reverse=True)
+    return children[:limit]
 
 
 def format_bytes(value: int | None) -> str:

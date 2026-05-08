@@ -101,3 +101,28 @@ def test_gui_applies_custom_investigation_range(monkeypatch, tmp_path):
 
     window.close()
     app.processEvents()
+
+
+def test_gui_drilldown_scans_selected_monitor_rule(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    watched = tmp_path / "watched"
+    child = watched / "child"
+    child.mkdir(parents=True)
+    (child / "file.bin").write_bytes(b"abc")
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    window.rule_table.setRowCount(0)
+    window.add_monitor_rule()
+    window.rule_table.item(0, 1).setText("Watched")
+    window.rule_table.item(0, 4).setText(str(watched))
+    window.save_runtime_settings()
+    window.scan_drilldown()
+
+    assert window.drilldown_table.rowCount() == 1
+    assert window.drilldown_table.item(0, 0).text() == "child"
+    assert window.drilldown_table.item(0, 1).text() == "3 B"
+
+    window.close()
+    app.processEvents()

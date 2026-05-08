@@ -30,6 +30,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.remove_rule": "删除选中规则",
         "button.choose_rule_directory": "选择监控目录...",
         "button.apply_time_range": "应用时间范围",
+        "button.scan_drilldown": "扫描子目录",
         "label.product_focus": "定位：记录磁盘空间变化证据，帮助你自己分析原因。",
         "label.snapshot_evidence": "快照对比证据",
         "label.event_evidence": "文件事件辅助线索（最近 2 小时）",
@@ -65,6 +66,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.custom_end_time": "结束时间",
         "label.time_range_error": "起始时间必须早于结束时间。",
         "label.time_range_applied": "已应用。",
+        "label.drilldown_rule": "目录钻取",
+        "label.drilldown_no_rule": "没有可钻取的监控规则。",
+        "label.drilldown_done": "已列出 {count} 项。",
+        "label.directory": "目录",
+        "label.file": "文件",
         "label.privacy_intro": (
             "Disk History 只记录元数据。\n\n"
             "详细记录：保存具体路径和大小变化。\n"
@@ -105,6 +111,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "table.window": "时间窗口",
         "table.enabled": "启用",
         "table.recursive": "递归",
+        "table.name": "名称",
+        "table.type": "类型",
+        "table.path": "路径",
         "yes": "是",
         "no": "否",
         "privacy.detailed": "详细记录",
@@ -139,6 +148,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.remove_rule": "Remove Selected Rule",
         "button.choose_rule_directory": "Choose Monitor Folder...",
         "button.apply_time_range": "Apply Time Range",
+        "button.scan_drilldown": "Scan Children",
         "label.product_focus": "Focus: record disk space evidence so you can analyze the cause.",
         "label.snapshot_evidence": "Snapshot Comparison Evidence",
         "label.event_evidence": "File Event Clues (Last 2 Hours)",
@@ -174,6 +184,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.custom_end_time": "End time",
         "label.time_range_error": "Start time must be before end time.",
         "label.time_range_applied": "Applied.",
+        "label.drilldown_rule": "Drill Down",
+        "label.drilldown_no_rule": "No monitor rule is available for drilldown.",
+        "label.drilldown_done": "Listed {count} items.",
+        "label.directory": "Directory",
+        "label.file": "File",
         "label.privacy_intro": (
             "Disk History records metadata only.\n\n"
             "Detailed mode stores concrete paths and size changes.\n"
@@ -216,6 +231,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "table.window": "Window",
         "table.enabled": "Enabled",
         "table.recursive": "Recursive",
+        "table.name": "Name",
+        "table.type": "Type",
+        "table.path": "Path",
         "yes": "Yes",
         "no": "No",
         "privacy.detailed": "Detailed",

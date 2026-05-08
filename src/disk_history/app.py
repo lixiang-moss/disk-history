@@ -53,7 +53,7 @@ from disk_history.database import DiskHistoryDatabase
 from disk_history.i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 from disk_history.notifications import TrayNotifier
 from disk_history.privacy import DETAILED, IGNORE, SUMMARY
-from disk_history.scanner import capture_snapshots, format_bytes
+from disk_history.scanner import capture_snapshots, child_size_rankings, format_bytes
 from disk_history.settings import load_settings, resolved_log_directory, save_settings, settings_path
 from disk_history.startup import (
     disable_start_on_login,
@@ -190,6 +190,31 @@ class MainWindow(QMainWindow):
         custom_range_row.addWidget(self.custom_range_status_label)
         custom_range_row.addStretch(1)
         layout.addLayout(custom_range_row)
+
+        drilldown_row = QHBoxLayout()
+        self.drilldown_rule_combo = QComboBox()
+        self._populate_drilldown_rules()
+        self.scan_drilldown_button = QPushButton(self.t("button.scan_drilldown"))
+        self.scan_drilldown_button.clicked.connect(self.scan_drilldown)
+        self.drilldown_status_label = QLabel()
+        drilldown_row.addWidget(QLabel(self.t("label.drilldown_rule")))
+        drilldown_row.addWidget(self.drilldown_rule_combo)
+        drilldown_row.addWidget(self.scan_drilldown_button)
+        drilldown_row.addWidget(self.drilldown_status_label)
+        drilldown_row.addStretch(1)
+        layout.addLayout(drilldown_row)
+
+        self.drilldown_table = QTableWidget(0, 5)
+        self.drilldown_table.setHorizontalHeaderLabels(
+            [
+                self.t("table.name"),
+                self.t("table.size"),
+                self.t("table.files"),
+                self.t("table.type"),
+                self.t("table.path"),
+            ]
+        )
+        layout.addWidget(self.drilldown_table)
 
         self.investigation_summary = QTextEdit()
         self.investigation_summary.setReadOnly(True)
@@ -559,6 +584,40 @@ class MainWindow(QMainWindow):
         self.custom_range_status_label.setText(self.t("label.time_range_applied"))
         self.refresh_all()
 
+    def _populate_drilldown_rules(self) -> None:
+        self.drilldown_rule_combo.clear()
+        for rule in self.settings.monitor_rules:
+            if rule.enabled and rule.privacy_mode != IGNORE:
+                self.drilldown_rule_combo.addItem(rule.name, rule.path_template)
+
+    def scan_drilldown(self) -> None:
+        path_template = self.drilldown_rule_combo.currentData()
+        if path_template is None:
+            self.drilldown_status_label.setText(self.t("label.drilldown_no_rule"))
+            return
+        rule_path = MonitorRule(
+            self.drilldown_rule_combo.currentText(),
+            str(path_template),
+            SUMMARY,
+        ).resolved_path()
+        rows = child_size_rankings(rule_path, self._excluded_roots())
+        self.drilldown_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            values = [
+                row.name,
+                format_bytes(row.size_bytes),
+                str(row.file_count),
+                self.t("label.directory") if row.is_directory else self.t("label.file"),
+                str(row.path),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column in {1, 2}:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.drilldown_table.setItem(row_index, column, item)
+        self.drilldown_table.resizeColumnsToContents()
+        self.drilldown_status_label.setText(self.t("label.drilldown_done", count=len(rows)))
+
     def _refresh_directory_chart(self, rows) -> None:
         rankings = directory_rankings(rows)
         if not rankings:
@@ -805,6 +864,7 @@ class MainWindow(QMainWindow):
         self.log_directory_resolved_label.setText(
             self.t("label.log_directory_resolved", path=resolved_log_directory(self.settings))
         )
+        self._populate_drilldown_rules()
 
         if was_monitoring:
             self.start_monitoring()
