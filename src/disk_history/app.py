@@ -46,10 +46,11 @@ from disk_history.analytics import (
     timeline_by_hour,
 )
 from disk_history.activity_log import activity_log_writer, detect_growth_alert
-from disk_history.config import app_data_dir, database_path
+from disk_history.config import MonitorRule, app_data_dir, database_path
 from disk_history.database import DiskHistoryDatabase
 from disk_history.i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 from disk_history.notifications import TrayNotifier
+from disk_history.privacy import DETAILED, IGNORE, SUMMARY
 from disk_history.scanner import capture_snapshots, format_bytes
 from disk_history.settings import load_settings, resolved_log_directory, save_settings, settings_path
 from disk_history.startup import (
@@ -229,7 +230,8 @@ class MainWindow(QMainWindow):
         language_row.addStretch(1)
         layout.addLayout(language_row)
 
-        self.rule_table = QTableWidget(len(self.settings.monitor_rules), 5)
+        layout.addWidget(QLabel(self.t("label.monitor_rules_editor")))
+        self.rule_table = QTableWidget(0, 5)
         self.rule_table.setHorizontalHeaderLabels(
             [
                 self.t("table.enabled"),
@@ -239,18 +241,21 @@ class MainWindow(QMainWindow):
                 self.t("table.path_template"),
             ]
         )
-        for index, rule in enumerate(self.settings.monitor_rules):
-            values = [
-                self.t("yes") if rule.enabled else self.t("no"),
-                rule.name,
-                rule.privacy_mode,
-                self.t("yes") if rule.recursive else self.t("no"),
-                rule.path_template,
-            ]
-            for column, value in enumerate(values):
-                self.rule_table.setItem(index, column, QTableWidgetItem(value))
-        self.rule_table.resizeColumnsToContents()
+        self._populate_rule_table(self.settings.monitor_rules)
         layout.addWidget(self.rule_table)
+
+        rule_actions = QHBoxLayout()
+        self.add_rule_button = QPushButton(self.t("button.add_rule"))
+        self.add_rule_button.clicked.connect(self.add_monitor_rule)
+        self.remove_rule_button = QPushButton(self.t("button.remove_rule"))
+        self.remove_rule_button.clicked.connect(self.remove_selected_monitor_rule)
+        self.browse_rule_button = QPushButton(self.t("button.choose_rule_directory"))
+        self.browse_rule_button.clicked.connect(self.choose_monitor_rule_directory)
+        rule_actions.addWidget(self.add_rule_button)
+        rule_actions.addWidget(self.remove_rule_button)
+        rule_actions.addWidget(self.browse_rule_button)
+        rule_actions.addStretch(1)
+        layout.addLayout(rule_actions)
 
         self.startup_status_label = QLabel()
         layout.addWidget(self.startup_status_label)
@@ -637,6 +642,64 @@ class MainWindow(QMainWindow):
     def _excluded_roots(self):
         return (resolved_log_directory(self.settings),)
 
+    def _populate_rule_table(self, rules: tuple[MonitorRule, ...]) -> None:
+        self.rule_table.setRowCount(0)
+        for rule in rules:
+            self._append_rule_row(rule)
+        self.rule_table.resizeColumnsToContents()
+
+    def _append_rule_row(self, rule: MonitorRule) -> None:
+        row = self.rule_table.rowCount()
+        self.rule_table.insertRow(row)
+
+        enabled_item = _check_item(rule.enabled)
+        self.rule_table.setItem(row, 0, enabled_item)
+        self.rule_table.setItem(row, 1, QTableWidgetItem(rule.name))
+
+        privacy_combo = QComboBox()
+        for mode in (DETAILED, SUMMARY, IGNORE):
+            privacy_combo.addItem(self.t(f"privacy.{mode}"), mode)
+        privacy_combo.setCurrentIndex(max(0, privacy_combo.findData(rule.privacy_mode)))
+        self.rule_table.setCellWidget(row, 2, privacy_combo)
+
+        recursive_item = _check_item(rule.recursive)
+        self.rule_table.setItem(row, 3, recursive_item)
+        self.rule_table.setItem(row, 4, QTableWidgetItem(rule.path_template))
+
+    def add_monitor_rule(self) -> None:
+        self._append_rule_row(
+            MonitorRule(
+                self.t("default.custom_rule_name"),
+                "",
+                SUMMARY,
+                enabled=True,
+                recursive=True,
+            )
+        )
+        self.rule_table.setCurrentCell(self.rule_table.rowCount() - 1, 4)
+
+    def remove_selected_monitor_rule(self) -> None:
+        row = self.rule_table.currentRow()
+        if row < 0:
+            self.settings_status_label.setText(self.t("label.rule_select_first"))
+            return
+        self.rule_table.removeRow(row)
+
+    def choose_monitor_rule_directory(self) -> None:
+        row = self.rule_table.currentRow()
+        if row < 0:
+            self.settings_status_label.setText(self.t("label.rule_select_first"))
+            return
+        path_item = self.rule_table.item(row, 4)
+        current = path_item.text() if path_item else ""
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            self.t("dialog.choose_monitor_directory"),
+            current,
+        )
+        if selected:
+            self.rule_table.setItem(row, 4, QTableWidgetItem(selected))
+
     def choose_log_directory(self) -> None:
         current = str(resolved_log_directory(self.settings))
         selected = QFileDialog.getExistingDirectory(
@@ -652,6 +715,9 @@ class MainWindow(QMainWindow):
         if not log_directory:
             self.settings_status_label.setText(self.t("label.settings_error_empty_log_directory"))
             return
+        monitor_rules = self._monitor_rules_from_table()
+        if monitor_rules is None:
+            return
 
         was_monitoring = self.watcher is not None and self.watcher.is_running
         if was_monitoring:
@@ -659,6 +725,7 @@ class MainWindow(QMainWindow):
 
         self.settings = replace(
             self.settings,
+            monitor_rules=monitor_rules,
             background_snapshot_interval_minutes=self.background_interval_spin.value(),
             log_directory=log_directory,
             enable_growth_alerts=self.enable_growth_alerts_check.isChecked(),
@@ -673,6 +740,36 @@ class MainWindow(QMainWindow):
 
         if was_monitoring:
             self.start_monitoring()
+
+    def _monitor_rules_from_table(self) -> tuple[MonitorRule, ...] | None:
+        rules: list[MonitorRule] = []
+        for row in range(self.rule_table.rowCount()):
+            name_item = self.rule_table.item(row, 1)
+            path_item = self.rule_table.item(row, 4)
+            name = name_item.text().strip() if name_item else ""
+            path_template = path_item.text().strip() if path_item else ""
+            if not name:
+                self.settings_status_label.setText(self.t("label.rule_error_empty_name", row=row + 1))
+                return None
+            if not path_template:
+                self.settings_status_label.setText(self.t("label.rule_error_empty_path", row=row + 1))
+                return None
+
+            privacy_widget = self.rule_table.cellWidget(row, 2)
+            privacy_mode = SUMMARY
+            if isinstance(privacy_widget, QComboBox):
+                privacy_mode = str(privacy_widget.currentData())
+
+            rules.append(
+                MonitorRule(
+                    name=name,
+                    path_template=path_template,
+                    privacy_mode=privacy_mode,
+                    enabled=_item_checked(self.rule_table.item(row, 0)),
+                    recursive=_item_checked(self.rule_table.item(row, 3)),
+                )
+            )
+        return tuple(rules)
 
     def _write_activity_logs_and_alert(self, snapshots) -> None:
         writer = activity_log_writer(self.settings)
@@ -728,6 +825,18 @@ class MainWindow(QMainWindow):
 
 def _to_mb(value: int) -> float:
     return value / 1024 / 1024
+
+
+def _check_item(checked: bool) -> QTableWidgetItem:
+    item = QTableWidgetItem("")
+    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+    item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+    item.setTextAlignment(Qt.AlignCenter)
+    return item
+
+
+def _item_checked(item: QTableWidgetItem | None) -> bool:
+    return item is not None and item.checkState() == Qt.Checked
 
 
 def _heat_color(intensity: float) -> QColor:

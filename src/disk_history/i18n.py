@@ -26,6 +26,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.clear_history": "清空本地历史",
         "button.browse": "选择...",
         "button.save_settings": "保存设置",
+        "button.add_rule": "添加监控规则",
+        "button.remove_rule": "删除选中规则",
+        "button.choose_rule_directory": "选择监控目录...",
         "label.product_focus": "定位：记录磁盘空间变化证据，帮助你自己分析原因。",
         "label.snapshot_evidence": "快照对比证据",
         "label.event_evidence": "文件事件辅助线索（最近 2 小时）",
@@ -52,6 +55,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.latest_scan": "最近快照时间：{time}",
         "label.no_scan": "还没有快照数据，请先点击“扫描一次”。",
         "label.language": "界面语言",
+        "label.monitor_rules_editor": "监控规则",
+        "label.rule_select_first": "请先选中一条监控规则。",
+        "label.rule_error_empty_name": "第 {row} 条监控规则的名称不能为空。",
+        "label.rule_error_empty_path": "第 {row} 条监控规则的路径不能为空。",
         "label.privacy_intro": (
             "Disk History 只记录元数据。\n\n"
             "详细记录：保存具体路径和大小变化。\n"
@@ -93,11 +100,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "table.recursive": "递归",
         "yes": "是",
         "no": "否",
+        "privacy.detailed": "详细记录",
+        "privacy.summary": "汇总记录",
+        "privacy.ignore": "忽略",
+        "default.custom_rule_name": "自定义目录",
         "dialog.clear_title": "清空本地历史",
         "dialog.clear_body": (
             "确定要清空 SQLite 数据库里的历史记录吗？这个操作不会删除磁盘上的真实文件。"
         ),
         "dialog.choose_log_directory": "选择日志目录",
+        "dialog.choose_monitor_directory": "选择监控目录",
     },
     "en": {
         "app.title": "Disk History",
@@ -116,6 +128,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.clear_history": "Clear Local History",
         "button.browse": "Browse...",
         "button.save_settings": "Save Settings",
+        "button.add_rule": "Add Monitor Rule",
+        "button.remove_rule": "Remove Selected Rule",
+        "button.choose_rule_directory": "Choose Monitor Folder...",
         "label.product_focus": "Focus: record disk space evidence so you can analyze the cause.",
         "label.snapshot_evidence": "Snapshot Comparison Evidence",
         "label.event_evidence": "File Event Clues (Last 2 Hours)",
@@ -142,6 +157,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.latest_scan": "Latest snapshot time: {time}",
         "label.no_scan": "No snapshot data yet. Click Scan Once first.",
         "label.language": "Interface language",
+        "label.monitor_rules_editor": "Monitor Rules",
+        "label.rule_select_first": "Select a monitor rule first.",
+        "label.rule_error_empty_name": "Monitor rule {row} needs a name.",
+        "label.rule_error_empty_path": "Monitor rule {row} needs a path.",
         "label.privacy_intro": (
             "Disk History records metadata only.\n\n"
             "Detailed mode stores concrete paths and size changes.\n"
@@ -185,11 +204,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "table.recursive": "Recursive",
         "yes": "Yes",
         "no": "No",
+        "privacy.detailed": "Detailed",
+        "privacy.summary": "Summary",
+        "privacy.ignore": "Ignore",
+        "default.custom_rule_name": "Custom Folder",
         "dialog.clear_title": "Clear Local History",
         "dialog.clear_body": (
             "Clear history from the SQLite database? This will not delete real files on disk."
         ),
         "dialog.choose_log_directory": "Choose Log Directory",
+        "dialog.choose_monitor_directory": "Choose Monitor Folder",
     },
 }
 

@@ -32,3 +32,46 @@ def test_gui_saves_runtime_settings(monkeypatch, tmp_path):
 
     window.close()
     app.processEvents()
+
+
+def test_gui_saves_monitor_rule_edits(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    window.rule_table.setRowCount(0)
+    window.add_monitor_rule()
+    window.rule_table.item(0, 1).setText("Project Cache")
+    window.rule_table.item(0, 4).setText(str(tmp_path / "cache"))
+    privacy_combo = window.rule_table.cellWidget(0, 2)
+    privacy_combo.setCurrentIndex(privacy_combo.findData("detailed"))
+    window.save_runtime_settings()
+
+    settings = load_settings(create_if_missing=False)
+
+    assert len(settings.monitor_rules) == 1
+    assert settings.monitor_rules[0].name == "Project Cache"
+    assert settings.monitor_rules[0].path_template == str(tmp_path / "cache")
+    assert settings.monitor_rules[0].privacy_mode == "detailed"
+    assert settings.monitor_rules[0].enabled is True
+    assert settings.monitor_rules[0].recursive is True
+
+    window.close()
+    app.processEvents()
+
+
+def test_gui_rejects_monitor_rule_without_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    window.rule_table.setRowCount(0)
+    window.add_monitor_rule()
+    window.save_runtime_settings()
+
+    assert "路径不能为空" in window.settings_status_label.text()
+
+    window.close()
+    app.processEvents()
