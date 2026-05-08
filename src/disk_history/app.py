@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
+from datetime import timedelta
 
 from PySide6.QtCharts import (
     QBarCategoryAxis,
@@ -39,11 +40,13 @@ from disk_history.analytics import (
     snapshot_summary,
     timeline_by_hour,
 )
+from disk_history.activity_log import activity_log_writer, detect_growth_alert
 from disk_history.config import app_data_dir, database_path
 from disk_history.database import DiskHistoryDatabase
 from disk_history.i18n import SUPPORTED_LANGUAGES, normalize_language, translate
+from disk_history.notifications import TrayNotifier
 from disk_history.scanner import capture_snapshots, format_bytes
-from disk_history.settings import load_settings, save_settings, settings_path
+from disk_history.settings import load_settings, resolved_log_directory, save_settings, settings_path
 from disk_history.startup import (
     disable_start_on_login,
     enable_start_on_login,
@@ -62,6 +65,7 @@ class MainWindow(QMainWindow):
         self.settings = load_settings()
         self.language = normalize_language(self.settings.language)
         self.watcher: DiskHistoryWatcher | None = None
+        self.notifier = TrayNotifier()
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(3000)
         self.refresh_timer.timeout.connect(self.refresh_all)
@@ -253,6 +257,14 @@ class MainWindow(QMainWindow):
                 )
             )
         )
+        self.log_directory_label = QLabel()
+        self.alerts_enabled_label = QLabel()
+        self.alert_window_label = QLabel()
+        self.alert_threshold_label = QLabel()
+        layout.addWidget(self.log_directory_label)
+        layout.addWidget(self.alerts_enabled_label)
+        layout.addWidget(self.alert_window_label)
+        layout.addWidget(self.alert_threshold_label)
         startup_row = QHBoxLayout()
         self.enable_startup_button = QPushButton(self.t("button.enable_startup"))
         self.enable_startup_button.clicked.connect(self.enable_startup)
@@ -279,8 +291,9 @@ class MainWindow(QMainWindow):
 
     def scan_once(self) -> None:
         self.settings = load_settings()
-        snapshots = capture_snapshots(self.settings.monitor_rules)
+        snapshots = capture_snapshots(self.settings.monitor_rules, self._excluded_roots())
         self.database.insert_snapshots(snapshots)
+        self._write_activity_logs_and_alert(snapshots)
         self.refresh_all()
 
     def start_monitoring(self) -> None:
@@ -293,6 +306,7 @@ class MainWindow(QMainWindow):
             self.database,
             self.settings.monitor_rules,
             self.settings.ignore_patterns,
+            self._excluded_roots(),
         )
         try:
             self.watcher.start()
@@ -351,6 +365,7 @@ class MainWindow(QMainWindow):
         self._refresh_sources_chart(events)
         self._refresh_heatmap(events)
         self._refresh_startup_status()
+        self._refresh_log_settings()
 
     def _refresh_snapshots(self, rows) -> None:
         self.snapshot_table.setRowCount(len(rows))
@@ -585,6 +600,59 @@ class MainWindow(QMainWindow):
         )
         self.enable_startup_button.setEnabled(not enabled)
         self.disable_startup_button.setEnabled(enabled)
+
+    def _refresh_log_settings(self) -> None:
+        if not hasattr(self, "log_directory_label"):
+            return
+        self.settings = load_settings()
+        self.log_directory_label.setText(
+            self.t("label.log_directory", path=resolved_log_directory(self.settings))
+        )
+        self.alerts_enabled_label.setText(
+            self.t(
+                "label.alerts_enabled",
+                status=self.t("yes") if self.settings.enable_growth_alerts else self.t("no"),
+            )
+        )
+        self.alert_window_label.setText(
+            self.t("label.alert_window", minutes=self.settings.alert_window_minutes)
+        )
+        self.alert_threshold_label.setText(
+            self.t("label.alert_threshold", mb=self.settings.alert_growth_threshold_mb)
+        )
+
+    def _excluded_roots(self):
+        return (resolved_log_directory(self.settings),)
+
+    def _write_activity_logs_and_alert(self, snapshots) -> None:
+        writer = activity_log_writer(self.settings)
+        writer.append_snapshots(snapshots)
+        if not snapshots:
+            return
+
+        now = snapshots[0].captured_at
+        event_rows = self.database.events_between(
+            now - timedelta(minutes=self.settings.alert_window_minutes),
+            now,
+            limit=1000,
+        )
+        writer.append_event_rows(event_rows, now)
+        alert = detect_growth_alert(
+            self.database.snapshot_history(),
+            settings=self.settings,
+            now=now,
+        )
+        if alert is None:
+            return
+        writer.append_alert(alert)
+        self.notifier.show_message(
+            self.t("notification.growth_alert.title"),
+            self.t(
+                "notification.growth_alert.body",
+                minutes=alert.window_minutes,
+                size=format_bytes(alert.net_growth_bytes),
+            ),
+        )
 
     def clear_history(self) -> None:
         result = QMessageBox.question(

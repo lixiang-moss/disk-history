@@ -34,6 +34,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.startup_status_disabled": "随开机启动：未开启",
         "label.startup_status_error": "随开机启动设置失败：{message}",
         "label.background_interval": "后台快照间隔：{minutes} 分钟",
+        "label.log_directory": "日志目录：{path}",
+        "label.alerts_enabled": "增长提醒：{status}",
+        "label.alert_window": "提醒窗口：{minutes} 分钟",
+        "label.alert_threshold": "提醒阈值：{mb} MB",
         "label.monitor_total": "当前监控规则：{count} 个",
         "label.monitor_status_stopped": "实时监听：未运行",
         "label.monitor_status_running": "实时监听：运行中，正在监听 {count} 个目录",
@@ -54,7 +58,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chart.sources": "最近 24 小时增长来源",
         "chart.empty": "暂无可显示数据",
         "investigation.summary": "{window}：净变化 {delta}，对比区间 {start} 到 {end}",
-        "investigation.not_enough_data": "{window}：快照不足，暂时无法对比。请保持后台记录运行一段时间。",
+        "investigation.not_enough_data": (
+            "{window}：快照不足，暂时无法对比。请保持后台记录运行一段时间。"
+        ),
         "window.30_minutes": "最近 30 分钟",
         "window.2_hours": "最近 2 小时",
         "window.today": "今天",
@@ -62,6 +68,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chart.size_mb": "大小（MB）",
         "chart.delta_mb": "变化量（MB）",
         "chart.hour_index": "最近 24 小时",
+        "notification.growth_alert.title": "Disk History 增长提醒",
+        "notification.growth_alert.body": "最近 {minutes} 分钟监控目录净增长 {size}，已写入日志。",
         "table.rule": "规则",
         "table.size": "大小",
         "table.files": "文件数",
@@ -80,7 +88,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "yes": "是",
         "no": "否",
         "dialog.clear_title": "清空本地历史",
-        "dialog.clear_body": "确定要清空 SQLite 数据库里的历史记录吗？这个操作不会删除磁盘上的真实文件。",
+        "dialog.clear_body": (
+            "确定要清空 SQLite 数据库里的历史记录吗？这个操作不会删除磁盘上的真实文件。"
+        ),
     },
     "en": {
         "app.title": "Disk History",
@@ -107,6 +117,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.startup_status_disabled": "Start on login: disabled",
         "label.startup_status_error": "Failed to update start on login: {message}",
         "label.background_interval": "Background snapshot interval: {minutes} minutes",
+        "label.log_directory": "Log directory: {path}",
+        "label.alerts_enabled": "Growth alerts: {status}",
+        "label.alert_window": "Alert window: {minutes} minutes",
+        "label.alert_threshold": "Alert threshold: {mb} MB",
         "label.monitor_total": "Monitor rules: {count}",
         "label.monitor_status_stopped": "Live monitoring: stopped",
         "label.monitor_status_running": "Live monitoring: running, watching {count} folders",
@@ -127,7 +141,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chart.sources": "Last 24 Hours Growth Sources",
         "chart.empty": "No data to display",
         "investigation.summary": "{window}: net change {delta}, comparing {start} to {end}",
-        "investigation.not_enough_data": "{window}: not enough snapshots to compare yet. Keep background recording running.",
+        "investigation.not_enough_data": (
+            "{window}: not enough snapshots to compare yet. Keep background recording running."
+        ),
         "window.30_minutes": "Last 30 Minutes",
         "window.2_hours": "Last 2 Hours",
         "window.today": "Today",
@@ -135,6 +151,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "chart.size_mb": "Size (MB)",
         "chart.delta_mb": "Delta (MB)",
         "chart.hour_index": "Last 24 Hours",
+        "notification.growth_alert.title": "Disk History Growth Alert",
+        "notification.growth_alert.body": (
+            "Monitored folders grew by {size} in the last {minutes} minutes. Logs were updated."
+        ),
         "table.rule": "Rule",
         "table.size": "Size",
         "table.files": "Files",

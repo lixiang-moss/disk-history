@@ -21,10 +21,13 @@ Disk History 被拆分成多个小模块，方便新手理解每一部分的职�
 - `database.py`：创建 SQLite 表结构，并负责写入和读取历史数据。
 - `scanner.py`：计算目录大小，用于生成目录快照。
 - `analytics.py`：把目录快照对比成调查窗口，并聚合辅助图表数据。
+- `activity_log.py`：把快照、文件事件和提醒写成按日分类的 Markdown 与 JSONL 日志。
 - `i18n.py`：集中管理界面中英文文本，避免文字散落在界面代码里。
+- `paths.py`：提供路径包含关系判断，用于实现日志目录排除。
 - `settings.py`：创建和读取本地可编辑配置文件。
 - `watcher.py`：通过 `watchdog` 监听实时文件变化。
 - `background.py`：后台周期性记录目录快照，并启动实时监听。
+- `notifications.py`：用 PySide6 的系统托盘能力发出增长提醒；如果系统不支持通知，日志写入仍然继续。
 - `startup.py`：管理当前用户登录后自动启动的快捷方式。
 - `app.py`：PySide6 桌面界面。
 - `cli.py`：命令行入口，用于扫描、监听、后台记录、打开界面等操作。
@@ -57,8 +60,27 @@ Disk History 被拆分成多个小模块，方便新手理解每一部分的职�
 {
   "language": "zh-CN",
   "start_on_login": false,
-  "background_snapshot_interval_minutes": 10
+  "background_snapshot_interval_minutes": 10,
+  "log_directory": "{LOCALAPPDATA}\\DiskHistory\\logs",
+  "enable_growth_alerts": true,
+  "alert_window_minutes": 30,
+  "alert_growth_threshold_mb": 5120
 }
+```
+
+默认日志目录：
+
+```text
+%LOCALAPPDATA%\DiskHistory\logs\
+```
+
+日志按日期分目录保存：
+
+```text
+logs\2026-05-08\summary.md
+logs\2026-05-08\snapshots.jsonl
+logs\2026-05-08\events.jsonl
+logs\2026-05-08\alerts.jsonl
 ```
 
 ## 核心证据模型
@@ -68,6 +90,26 @@ Disk History 以目录快照作为主要证据，以文件事件作为辅助线�
 - 目录快照回答“哪个目录在某个时间范围内变大或变小了”。
 - 文件事件回答“同一时间范围内有哪些文件发生过变化”。
 - 工具不承诺自动判断根因，用户根据这些记录自行分析。
+
+## 日志与提醒数据流
+
+```text
+后台或手动扫描
+  -> capture_snapshots()
+  -> SQLite directory_snapshots
+  -> activity_log.py 写入 snapshots.jsonl 和 summary.md
+  -> analytics.py 对比提醒窗口内的快照
+  -> 超过阈值时写入 alerts.jsonl
+  -> notifications.py 尝试显示系统托盘提醒
+```
+
+日志目录会被传入 `scanner.py` 和 `watcher.py` 的排除列表：
+
+- 扫描父目录时，日志目录及其子目录不参与大小统计。
+- 监听父目录时，日志目录内的文件事件会被忽略。
+- 如果用户把日志目录本身加入监控规则，监听目标会被跳过，不会报错退出。
+
+这样可以避免“工具写日志 -> 监听到日志变化 -> 再写日志”的循环。
 
 ## 可视化层
 

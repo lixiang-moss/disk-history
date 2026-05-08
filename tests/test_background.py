@@ -11,6 +11,7 @@ def test_background_recorder_capture_once(tmp_path):
     settings = AppSettings(
         monitor_rules=(MonitorRule("Watched", str(watched), "detailed"),),
         ignore_patterns=(),
+        log_directory=str(tmp_path / "logs"),
     )
     db = DiskHistoryDatabase(tmp_path / "background.sqlite3")
     db.initialize()
@@ -22,4 +23,5 @@ def test_background_recorder_capture_once(tmp_path):
     assert len(snapshots) == 1
     assert snapshots[0]["rule_name"] == "Watched"
     assert snapshots[0]["size_bytes"] == 3
+    assert (tmp_path / "logs").exists()
     db.close()

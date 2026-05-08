@@ -20,6 +20,16 @@ def test_watch_targets_only_include_existing_enabled_paths(tmp_path):
     assert targets[0].path == existing
 
 
+def test_watch_targets_skip_excluded_log_directory(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    rules = (MonitorRule("Logs", str(logs), "detailed", enabled=True),)
+
+    targets = watch_targets(rules, excluded_roots=(logs,))
+
+    assert targets == []
+
+
 def test_disk_history_watcher_start_stop(tmp_path):
     watched = tmp_path / "watched"
     watched.mkdir()

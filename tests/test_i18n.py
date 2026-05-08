@@ -13,4 +13,3 @@ def test_translation_keys_are_complete():
 def test_translate_formats_values():
     assert translate("zh-CN", "label.monitor_total", count=3) == "当前监控规则：3 个"
     assert translate("en", "label.monitor_total", count=3) == "Monitor rules: 3"
-

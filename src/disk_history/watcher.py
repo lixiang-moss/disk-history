@@ -9,6 +9,7 @@ from watchdog.observers import Observer
 
 from disk_history.config import DEFAULT_IGNORE_PATTERNS, DEFAULT_MONITOR_RULES, MonitorRule
 from disk_history.database import DiskHistoryDatabase, FileEvent, utc_now
+from disk_history.paths import is_path_excluded
 from disk_history.privacy import IGNORE, SUMMARY, PrivacyPolicy
 
 
@@ -20,11 +21,17 @@ class WatchTarget:
 
 
 class DiskHistoryEventHandler(FileSystemEventHandler):
-    def __init__(self, database: DiskHistoryDatabase, privacy_policy: PrivacyPolicy) -> None:
+    def __init__(
+        self,
+        database: DiskHistoryDatabase,
+        privacy_policy: PrivacyPolicy,
+        excluded_roots: tuple[Path, ...] = (),
+    ) -> None:
         super().__init__()
         self.database = database
         self.privacy_policy = privacy_policy
         self.size_cache: dict[str, int] = {}
+        self.excluded_roots = excluded_roots
 
     def on_any_event(self, event: FileSystemEvent) -> None:
         if event.event_type in {"opened", "closed"}:
@@ -36,6 +43,8 @@ class DiskHistoryEventHandler(FileSystemEventHandler):
 
     def _record_moved(self, event: FileSystemMovedEvent) -> None:
         destination = Path(event.dest_path)
+        if is_path_excluded(destination, self.excluded_roots):
+            return
         decision = self.privacy_policy.classify(destination)
         if decision.mode == IGNORE:
             return
@@ -59,6 +68,9 @@ class DiskHistoryEventHandler(FileSystemEventHandler):
         )
 
     def _record_path(self, event_type: str, path: Path, is_directory: bool) -> None:
+        if is_path_excluded(path, self.excluded_roots):
+            return
+
         decision = self.privacy_policy.classify(path)
         if decision.mode == IGNORE:
             return
@@ -103,10 +115,12 @@ class DiskHistoryWatcher:
         database: DiskHistoryDatabase,
         monitor_rules: tuple[MonitorRule, ...] = DEFAULT_MONITOR_RULES,
         ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE_PATTERNS,
+        excluded_roots: tuple[Path, ...] = (),
     ) -> None:
         self.database = database
         self.monitor_rules = monitor_rules
         self.ignore_patterns = ignore_patterns
+        self.excluded_roots = excluded_roots
         self.observer: Observer | None = None
         self.targets: list[WatchTarget] = []
 
@@ -119,9 +133,9 @@ class DiskHistoryWatcher:
             return self.targets
 
         privacy_policy = PrivacyPolicy(self.monitor_rules, self.ignore_patterns)
-        handler = DiskHistoryEventHandler(self.database, privacy_policy)
+        handler = DiskHistoryEventHandler(self.database, privacy_policy, self.excluded_roots)
         observer = Observer()
-        targets = watch_targets(self.monitor_rules)
+        targets = watch_targets(self.monitor_rules, self.excluded_roots)
 
         for target in targets:
             observer.schedule(handler, str(target.path), recursive=target.recursive)
@@ -154,12 +168,15 @@ def safe_size(path: Path) -> int | None:
 
 def watch_targets(
     monitor_rules: tuple[MonitorRule, ...] = DEFAULT_MONITOR_RULES,
+    excluded_roots: tuple[Path, ...] = (),
 ) -> list[WatchTarget]:
     targets: list[WatchTarget] = []
     for rule in monitor_rules:
         if not rule.enabled:
             continue
         path = rule.resolved_path()
+        if is_path_excluded(path, excluded_roots):
+            continue
         if path.exists():
             targets.append(WatchTarget(rule.name, path, rule.recursive))
     return targets
@@ -169,8 +186,9 @@ def run_watcher(
     database: DiskHistoryDatabase,
     monitor_rules: tuple[MonitorRule, ...] = DEFAULT_MONITOR_RULES,
     ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE_PATTERNS,
+    excluded_roots: tuple[Path, ...] = (),
 ) -> None:
-    watcher = DiskHistoryWatcher(database, monitor_rules, ignore_patterns)
+    watcher = DiskHistoryWatcher(database, monitor_rules, ignore_patterns, excluded_roots)
     watcher.start()
     try:
         while True:

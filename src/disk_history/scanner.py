@@ -6,6 +6,7 @@ from pathlib import Path
 
 from disk_history.config import DEFAULT_MONITOR_RULES, MonitorRule
 from disk_history.database import DirectorySnapshot, utc_now
+from disk_history.paths import is_path_excluded
 
 
 @dataclass(frozen=True)
@@ -16,7 +17,10 @@ class DirectorySize:
     error_count: int
 
 
-def directory_size(path: Path) -> DirectorySize:
+def directory_size(path: Path, excluded_roots: tuple[Path, ...] = ()) -> DirectorySize:
+    if is_path_excluded(path, excluded_roots):
+        return DirectorySize(False, 0, 0, 0)
+
     if not path.exists():
         return DirectorySize(False, 0, 0, 0)
 
@@ -37,8 +41,11 @@ def directory_size(path: Path) -> DirectorySize:
             with os.scandir(current) as entries:
                 for entry in entries:
                     try:
+                        entry_path = Path(entry.path)
+                        if is_path_excluded(entry_path, excluded_roots):
+                            continue
                         if entry.is_dir(follow_symlinks=False):
-                            stack.append(Path(entry.path))
+                            stack.append(entry_path)
                         elif entry.is_file(follow_symlinks=False):
                             total += entry.stat(follow_symlinks=False).st_size
                             files += 1
@@ -52,6 +59,7 @@ def directory_size(path: Path) -> DirectorySize:
 
 def capture_snapshots(
     monitor_rules: tuple[MonitorRule, ...] = DEFAULT_MONITOR_RULES,
+    excluded_roots: tuple[Path, ...] = (),
 ) -> list[DirectorySnapshot]:
     captured_at = utc_now()
     snapshots: list[DirectorySnapshot] = []
@@ -59,7 +67,7 @@ def capture_snapshots(
     for rule in monitor_rules:
         if not rule.enabled:
             continue
-        result = directory_size(rule.resolved_path())
+        result = directory_size(rule.resolved_path(), excluded_roots)
         snapshots.append(
             DirectorySnapshot(
                 captured_at=captured_at,
@@ -88,4 +96,3 @@ def format_bytes(value: int | None) -> str:
             return f"{sign}{size:.1f} {unit}"
         size /= 1024
     return f"{sign}{size:.1f} TB"
-

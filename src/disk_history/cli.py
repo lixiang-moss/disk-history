@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from datetime import timedelta
 
+from disk_history.activity_log import activity_log_writer, detect_growth_alert
 from disk_history.config import database_path
 from disk_history.database import DiskHistoryDatabase
 from disk_history.scanner import capture_snapshots, format_bytes
-from disk_history.settings import load_settings, settings_path
+from disk_history.settings import load_settings, resolved_log_directory, settings_path
 from disk_history.watcher import run_watcher
 
 
@@ -43,8 +45,24 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "scan":
         settings = load_settings()
-        snapshots = capture_snapshots(settings.monitor_rules)
+        excluded_roots = (resolved_log_directory(settings),)
+        snapshots = capture_snapshots(settings.monitor_rules, excluded_roots)
         db.insert_snapshots(snapshots)
+        writer = activity_log_writer(settings)
+        writer.append_snapshots(snapshots)
+        if snapshots:
+            now = snapshots[0].captured_at
+            writer.append_event_rows(
+                db.events_between(
+                    now - timedelta(minutes=settings.alert_window_minutes),
+                    now,
+                    limit=1000,
+                ),
+                now,
+            )
+            alert = detect_growth_alert(db.snapshot_history(), settings=settings, now=now)
+            if alert is not None:
+                writer.append_alert(alert)
         for snapshot in snapshots:
             exists = "exists" if snapshot.exists else "missing"
             print(
@@ -62,7 +80,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "watch":
         settings = load_settings()
-        run_watcher(db, settings.monitor_rules, settings.ignore_patterns)
+        run_watcher(
+            db,
+            settings.monitor_rules,
+            settings.ignore_patterns,
+            (resolved_log_directory(settings),),
+        )
         return 0
 
     if command == "background":
