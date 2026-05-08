@@ -33,9 +33,9 @@ from PySide6.QtWidgets import (
 
 from disk_history.analytics import (
     category_growth,
-    cleanup_recommendations,
     directory_rankings,
     heatmap_cells,
+    investigation_windows,
     snapshot_summary,
     timeline_by_hour,
 )
@@ -44,6 +44,11 @@ from disk_history.database import DiskHistoryDatabase
 from disk_history.i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 from disk_history.scanner import capture_snapshots, format_bytes
 from disk_history.settings import load_settings, save_settings, settings_path
+from disk_history.startup import (
+    disable_start_on_login,
+    enable_start_on_login,
+    is_start_on_login_enabled,
+)
 from disk_history.watcher import DiskHistoryWatcher
 
 
@@ -72,9 +77,9 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._overview_tab(), self.t("tab.overview"))
         self.tabs.addTab(self._timeline_tab(), self.t("tab.timeline"))
+        self.tabs.addTab(self._investigation_tab(), self.t("tab.investigation"))
         self.tabs.addTab(self._sources_tab(), self.t("tab.sources"))
         self.tabs.addTab(self._heatmap_tab(), self.t("tab.heatmap"))
-        self.tabs.addTab(self._cleanup_tab(), self.t("tab.cleanup"))
         self.tabs.addTab(self._settings_tab(), self.t("tab.settings"))
         self.setCentralWidget(self.tabs)
 
@@ -85,6 +90,8 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel()
         self.summary_label = QLabel()
         self.monitor_status_label = QLabel()
+        self.focus_label = QLabel(self.t("label.product_focus"))
+        layout.addWidget(self.focus_label)
         layout.addWidget(self.status_label)
         layout.addWidget(self.summary_label)
         layout.addWidget(self.monitor_status_label)
@@ -144,6 +151,43 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.event_table)
         return widget
 
+    def _investigation_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(QLabel(self.t("label.snapshot_evidence")))
+
+        self.investigation_summary = QTextEdit()
+        self.investigation_summary.setReadOnly(True)
+        self.investigation_summary.setMaximumHeight(120)
+        layout.addWidget(self.investigation_summary)
+
+        self.investigation_table = QTableWidget(0, 6)
+        self.investigation_table.setHorizontalHeaderLabels(
+            [
+                self.t("table.window"),
+                self.t("table.rule"),
+                self.t("table.delta"),
+                self.t("table.start_size"),
+                self.t("table.end_size"),
+                self.t("table.privacy"),
+            ]
+        )
+        layout.addWidget(self.investigation_table)
+
+        layout.addWidget(QLabel(self.t("label.event_evidence")))
+        self.investigation_event_table = QTableWidget(0, 5)
+        self.investigation_event_table.setHorizontalHeaderLabels(
+            [
+                self.t("table.time"),
+                self.t("table.event"),
+                self.t("table.delta"),
+                self.t("table.category"),
+                self.t("table.display_path"),
+            ]
+        )
+        layout.addWidget(self.investigation_event_table)
+        return widget
+
     def _sources_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -159,21 +203,6 @@ class MainWindow(QMainWindow):
         self.heatmap_table.setHorizontalHeaderLabels([f"{hour:02d}" for hour in range(24)])
         self.heatmap_table.verticalHeader().setDefaultSectionSize(32)
         layout.addWidget(self.heatmap_table)
-        return widget
-
-    def _cleanup_tab(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        self.cleanup_table = QTableWidget(0, 4)
-        self.cleanup_table.setHorizontalHeaderLabels(
-            [
-                self.t("table.risk"),
-                self.t("table.target"),
-                self.t("table.size"),
-                self.t("table.suggestion"),
-            ]
-        )
-        layout.addWidget(self.cleanup_table)
         return widget
 
     def _settings_tab(self) -> QWidget:
@@ -213,6 +242,26 @@ class MainWindow(QMainWindow):
                 self.rule_table.setItem(index, column, QTableWidgetItem(value))
         self.rule_table.resizeColumnsToContents()
         layout.addWidget(self.rule_table)
+
+        self.startup_status_label = QLabel()
+        layout.addWidget(self.startup_status_label)
+        layout.addWidget(
+            QLabel(
+                self.t(
+                    "label.background_interval",
+                    minutes=self.settings.background_snapshot_interval_minutes,
+                )
+            )
+        )
+        startup_row = QHBoxLayout()
+        self.enable_startup_button = QPushButton(self.t("button.enable_startup"))
+        self.enable_startup_button.clicked.connect(self.enable_startup)
+        self.disable_startup_button = QPushButton(self.t("button.disable_startup"))
+        self.disable_startup_button.clicked.connect(self.disable_startup)
+        startup_row.addWidget(self.enable_startup_button)
+        startup_row.addWidget(self.disable_startup_button)
+        startup_row.addStretch(1)
+        layout.addLayout(startup_row)
 
         self.privacy_text = QTextEdit()
         self.privacy_text.setReadOnly(True)
@@ -265,6 +314,7 @@ class MainWindow(QMainWindow):
 
     def refresh_all(self) -> None:
         snapshots = self.database.latest_snapshots()
+        snapshot_history = self.database.snapshot_history()
         events = self.database.recent_events(limit=2000)
         summary = snapshot_summary(snapshots)
 
@@ -295,11 +345,12 @@ class MainWindow(QMainWindow):
 
         self._refresh_snapshots(snapshots)
         self._refresh_events(events)
+        self._refresh_investigation(snapshot_history)
         self._refresh_directory_chart(snapshots)
         self._refresh_timeline_chart(events)
         self._refresh_sources_chart(events)
         self._refresh_heatmap(events)
-        self._refresh_cleanup(snapshots)
+        self._refresh_startup_status()
 
     def _refresh_snapshots(self, rows) -> None:
         self.snapshot_table.setRowCount(len(rows))
@@ -332,6 +383,60 @@ class MainWindow(QMainWindow):
             for column, value in enumerate(values):
                 self.event_table.setItem(row_index, column, QTableWidgetItem(value))
         self.event_table.resizeColumnsToContents()
+
+    def _refresh_investigation(self, snapshot_rows) -> None:
+        windows = investigation_windows(snapshot_rows)
+        summary_lines = []
+        table_rows = []
+        for window in windows:
+            window_label = self.t(window.label_key)
+            if not window.has_enough_data:
+                summary_lines.append(self.t("investigation.not_enough_data", window=window_label))
+                continue
+
+            summary_lines.append(
+                self.t(
+                    "investigation.summary",
+                    window=window_label,
+                    delta=format_bytes(window.net_delta_bytes),
+                    start=window.start_at.strftime("%Y-%m-%d %H:%M"),
+                    end=window.end_at.strftime("%Y-%m-%d %H:%M"),
+                )
+            )
+            for delta in window.deltas:
+                table_rows.append((window_label, delta))
+
+        self.investigation_summary.setPlainText("\n".join(summary_lines))
+        self.investigation_table.setRowCount(len(table_rows))
+        for row_index, (window_label, delta) in enumerate(table_rows):
+            values = [
+                window_label,
+                delta.rule_name,
+                format_bytes(delta.delta_bytes),
+                format_bytes(delta.start_size_bytes),
+                format_bytes(delta.end_size_bytes),
+                delta.privacy_mode,
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column in {2, 3, 4}:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.investigation_table.setItem(row_index, column, item)
+        self.investigation_table.resizeColumnsToContents()
+
+        recent_events = self.database.events_between(windows[1].start_at, windows[1].end_at, limit=200)
+        self.investigation_event_table.setRowCount(len(recent_events))
+        for row_index, row in enumerate(recent_events):
+            values = [
+                row["happened_at"],
+                row["event_type"],
+                format_bytes(row["delta_bytes"]),
+                row["category"],
+                row["display_path"],
+            ]
+            for column, value in enumerate(values):
+                self.investigation_event_table.setItem(row_index, column, QTableWidgetItem(value))
+        self.investigation_event_table.resizeColumnsToContents()
 
     def _refresh_directory_chart(self, rows) -> None:
         rankings = directory_rankings(rows)
@@ -434,25 +539,6 @@ class MainWindow(QMainWindow):
                 self.heatmap_table.setItem(row_index, hour, item)
         self.heatmap_table.resizeColumnsToContents()
 
-    def _refresh_cleanup(self, rows) -> None:
-        recommendations = cleanup_recommendations(rows)
-        self.cleanup_table.setRowCount(len(recommendations))
-        for row_index, item in enumerate(recommendations):
-            values = [
-                self.t(f"risk.{item.risk}"),
-                item.rule_name,
-                format_bytes(item.size_bytes),
-                self.t(f"cleanup.{item.suggestion_key}"),
-            ]
-            for column, value in enumerate(values):
-                table_item = QTableWidgetItem(value)
-                if column == 0:
-                    table_item.setBackground(QBrush(_risk_color(item.risk)))
-                if column == 2:
-                    table_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                self.cleanup_table.setItem(row_index, column, table_item)
-        self.cleanup_table.resizeColumnsToContents()
-
     def change_language(self, _index: int | None = None) -> None:
         language = self.language_combo.currentData()
         normalized = normalize_language(str(language))
@@ -463,6 +549,42 @@ class MainWindow(QMainWindow):
         self.language = normalized
         self._build_ui()
         self.refresh_all()
+
+    def enable_startup(self) -> None:
+        try:
+            enable_start_on_login()
+        except (OSError, RuntimeError) as exc:
+            self.startup_status_label.setText(
+                self.t("label.startup_status_error", message=str(exc))
+            )
+            return
+        self.settings = replace(self.settings, start_on_login=True)
+        save_settings(self.settings)
+        self._refresh_startup_status()
+
+    def disable_startup(self) -> None:
+        try:
+            disable_start_on_login()
+        except OSError as exc:
+            self.startup_status_label.setText(
+                self.t("label.startup_status_error", message=str(exc))
+            )
+            return
+        self.settings = replace(self.settings, start_on_login=False)
+        save_settings(self.settings)
+        self._refresh_startup_status()
+
+    def _refresh_startup_status(self) -> None:
+        if not hasattr(self, "startup_status_label"):
+            return
+        enabled = is_start_on_login_enabled()
+        self.startup_status_label.setText(
+            self.t("label.startup_status_enabled")
+            if enabled
+            else self.t("label.startup_status_disabled")
+        )
+        self.enable_startup_button.setEnabled(not enabled)
+        self.disable_startup_button.setEnabled(enabled)
 
     def clear_history(self) -> None:
         result = QMessageBox.question(
@@ -496,14 +618,6 @@ def _heat_color(intensity: float) -> QColor:
     green = 255 - int(160 * bounded)
     blue = 255 - int(210 * bounded)
     return QColor(red, green, blue)
-
-
-def _risk_color(risk: str) -> QColor:
-    if risk == "safe":
-        return QColor(218, 245, 226)
-    if risk == "caution":
-        return QColor(255, 240, 204)
-    return QColor(238, 238, 238)
 
 
 def run_app() -> int:

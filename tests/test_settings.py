@@ -11,6 +11,8 @@ def test_load_settings_creates_default_config(monkeypatch, tmp_path):
     assert settings.monitor_rules
     assert settings.ignore_patterns
     assert settings.language == "zh-CN"
+    assert settings.start_on_login is False
+    assert settings.background_snapshot_interval_minutes == 10
     assert settings_path().exists()
 
 
@@ -30,6 +32,8 @@ def test_load_settings_reads_monitor_rules(monkeypatch, tmp_path):
                 ],
                 "ignore_patterns": ["*.tmp"],
                 "language": "en",
+                "start_on_login": True,
+                "background_snapshot_interval_minutes": 15,
             }
         ),
         encoding="utf-8",
@@ -41,6 +45,8 @@ def test_load_settings_reads_monitor_rules(monkeypatch, tmp_path):
     assert settings.monitor_rules[0].recursive is False
     assert settings.ignore_patterns == ("*.tmp",)
     assert settings.language == "en"
+    assert settings.start_on_login is True
+    assert settings.background_snapshot_interval_minutes == 15
 
 
 def test_load_settings_migrates_missing_language(monkeypatch, tmp_path):
@@ -60,3 +66,5 @@ def test_load_settings_migrates_missing_language(monkeypatch, tmp_path):
 
     assert settings.language == "zh-CN"
     assert raw["language"] == "zh-CN"
+    assert raw["start_on_login"] is False
+    assert raw["background_snapshot_interval_minutes"] == 10

@@ -44,11 +44,24 @@ class HeatmapCell:
 
 
 @dataclass(frozen=True)
-class CleanupRecommendation:
+class SnapshotDelta:
     rule_name: str
-    size_bytes: int
-    risk: str
-    suggestion_key: str
+    start_size_bytes: int
+    end_size_bytes: int
+    delta_bytes: int
+    start_time: datetime
+    end_time: datetime
+    privacy_mode: str
+
+
+@dataclass(frozen=True)
+class InvestigationWindow:
+    label_key: str
+    start_at: datetime
+    end_at: datetime
+    deltas: list[SnapshotDelta]
+    net_delta_bytes: int
+    has_enough_data: bool
 
 
 Row = Mapping[str, Any]
@@ -152,29 +165,85 @@ def heatmap_cells(
     return cells
 
 
-def cleanup_recommendations(snapshot_rows: Sequence[Row]) -> list[CleanupRecommendation]:
-    recommendations = []
+def investigation_windows(
+    snapshot_rows: Sequence[Row],
+    *,
+    now: datetime | None = None,
+) -> list[InvestigationWindow]:
+    end_at = _snapshot_now(snapshot_rows, now)
+    today_start = end_at.replace(hour=0, minute=0, second=0, microsecond=0)
+    presets = [
+        ("window.30_minutes", end_at - timedelta(minutes=30)),
+        ("window.2_hours", end_at - timedelta(hours=2)),
+        ("window.today", today_start),
+        ("window.7_days", end_at - timedelta(days=7)),
+    ]
+    return [
+        build_investigation_window(snapshot_rows, label_key=label_key, start_at=start_at, end_at=end_at)
+        for label_key, start_at in presets
+    ]
+
+
+def build_investigation_window(
+    snapshot_rows: Sequence[Row],
+    *,
+    label_key: str,
+    start_at: datetime,
+    end_at: datetime,
+) -> InvestigationWindow:
+    deltas = snapshot_deltas(snapshot_rows, start_at=start_at, end_at=end_at)
+    return InvestigationWindow(
+        label_key=label_key,
+        start_at=start_at,
+        end_at=end_at,
+        deltas=deltas,
+        net_delta_bytes=sum(delta.delta_bytes for delta in deltas),
+        has_enough_data=bool(deltas),
+    )
+
+
+def snapshot_deltas(
+    snapshot_rows: Sequence[Row],
+    *,
+    start_at: datetime,
+    end_at: datetime,
+    limit: int = 10,
+) -> list[SnapshotDelta]:
+    grouped: dict[str, list[Row]] = defaultdict(list)
     for row in snapshot_rows:
-        rule_name = str(row["rule_name"])
-        size_bytes = int(row["size_bytes"] or 0)
-        lower_name = rule_name.lower()
-        if "download" in lower_name:
-            risk, suggestion = "safe", "downloads"
-        elif "temp" in lower_name:
-            risk, suggestion = "safe", "temp"
-        elif "package cache" in lower_name:
-            risk, suggestion = "caution", "package_cache"
-        elif "windows update" in lower_name:
-            risk, suggestion = "caution", "windows_update"
-        elif "vs code" in lower_name:
-            risk, suggestion = "caution", "dev_tools"
-        elif "local programs" in lower_name:
-            risk, suggestion = "protected", "local_programs"
-        else:
-            risk, suggestion = "protected", "personal"
-        recommendations.append(CleanupRecommendation(rule_name, size_bytes, risk, suggestion))
-    recommendations.sort(key=lambda item: item.size_bytes, reverse=True)
-    return recommendations
+        captured_at = parse_time(str(row["captured_at"]))
+        if captured_at <= end_at:
+            grouped[str(row["rule_name"])].append(row)
+
+    deltas: list[SnapshotDelta] = []
+    for rule_name, rows in grouped.items():
+        rows = sorted(rows, key=lambda row: parse_time(str(row["captured_at"])))
+        end_row = _latest_at_or_before(rows, end_at)
+        start_row = _latest_at_or_before(rows, start_at) or _earliest_after(rows, start_at)
+        if start_row is None or end_row is None or start_row is end_row:
+            continue
+
+        start_time = parse_time(str(start_row["captured_at"]))
+        end_time = parse_time(str(end_row["captured_at"]))
+        if start_time >= end_time:
+            continue
+
+        start_size = int(start_row["size_bytes"] or 0)
+        end_size = int(end_row["size_bytes"] or 0)
+        deltas.append(
+            SnapshotDelta(
+                rule_name=rule_name,
+                start_size_bytes=start_size,
+                end_size_bytes=end_size,
+                delta_bytes=end_size - start_size,
+                start_time=start_time,
+                end_time=end_time,
+                privacy_mode=str(end_row["privacy_mode"]),
+            )
+        )
+
+    deltas.sort(key=lambda item: item.delta_bytes, reverse=True)
+    return deltas[:limit]
 
 
 def parse_time(value: str) -> datetime:
@@ -182,6 +251,23 @@ def parse_time(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _snapshot_now(snapshot_rows: Sequence[Row], now: datetime | None) -> datetime:
+    if now is not None:
+        return now.astimezone(UTC) if now.tzinfo else now.replace(tzinfo=UTC)
+    latest = max((parse_time(str(row["captured_at"])) for row in snapshot_rows), default=None)
+    return latest or datetime.now(UTC)
+
+
+def _latest_at_or_before(rows: Sequence[Row], moment: datetime) -> Row | None:
+    matches = [row for row in rows if parse_time(str(row["captured_at"])) <= moment]
+    return matches[-1] if matches else None
+
+
+def _earliest_after(rows: Sequence[Row], moment: datetime) -> Row | None:
+    matches = [row for row in rows if parse_time(str(row["captured_at"])) > moment]
+    return matches[0] if matches else None
 
 
 def _analysis_now(event_rows: Sequence[Row], now: datetime | None) -> datetime:
@@ -193,4 +279,3 @@ def _analysis_now(event_rows: Sequence[Row], now: datetime | None) -> datetime:
 
 def _cutoff(event_rows: Sequence[Row], hours: int, now: datetime | None) -> datetime:
     return _analysis_now(event_rows, now) - timedelta(hours=hours)
-

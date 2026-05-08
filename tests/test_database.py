@@ -53,3 +53,31 @@ def test_database_accepts_background_thread_writes(tmp_path):
 
     assert db.recent_events()[0]["category"] == "Thread"
     db.close()
+
+
+def test_database_filters_events_between_times(tmp_path):
+    db = DiskHistoryDatabase(tmp_path / "events.sqlite3")
+    db.initialize()
+    early = datetime(2026, 5, 6, 8, tzinfo=UTC)
+    late = datetime(2026, 5, 6, 10, tzinfo=UTC)
+    for happened_at, category in ((early, "Early"), (late, "Late")):
+        db.insert_event(
+            FileEvent(
+                happened_at=happened_at,
+                event_type="created",
+                privacy_mode="detailed",
+                category=category,
+                display_path=category,
+                path=category,
+                delta_bytes=1,
+            )
+        )
+
+    rows = db.events_between(
+        datetime(2026, 5, 6, 9, tzinfo=UTC),
+        datetime(2026, 5, 6, 11, tzinfo=UTC),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["category"] == "Late"
+    db.close()

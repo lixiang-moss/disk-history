@@ -2,10 +2,11 @@ from datetime import UTC, datetime
 
 from disk_history.analytics import (
     category_growth,
-    cleanup_recommendations,
     directory_rankings,
     heatmap_cells,
+    investigation_windows,
     snapshot_summary,
+    snapshot_deltas,
     timeline_by_hour,
 )
 from disk_history.database import format_time
@@ -68,7 +69,7 @@ def test_category_growth_and_timeline():
     assert [point.delta_bytes for point in points] == [50, 80, 0]
 
 
-def test_heatmap_and_cleanup_recommendations():
+def test_heatmap_cells():
     now = datetime(2026, 5, 6, 12, tzinfo=UTC)
     event_rows = [
         {
@@ -76,16 +77,50 @@ def test_heatmap_and_cleanup_recommendations():
             "delta_bytes": 100,
         }
     ]
-    snapshot_rows = [
-        {"rule_name": "Downloads", "size_bytes": 100, "file_count": 1},
-        {"rule_name": "Local Programs", "size_bytes": 200, "file_count": 2},
-    ]
 
     cells = heatmap_cells(event_rows, days=1, now=now)
-    recommendations = cleanup_recommendations(snapshot_rows)
 
     assert len(cells) == 24
     assert cells[11].event_count == 1
     assert cells[11].intensity == 1.0
-    assert recommendations[0].risk == "protected"
-    assert recommendations[1].risk == "safe"
+
+
+def test_snapshot_deltas_calculate_growth_and_shrink():
+    rows = [
+        _snapshot("Downloads", 100, datetime(2026, 5, 6, 8, tzinfo=UTC)),
+        _snapshot("Downloads", 180, datetime(2026, 5, 6, 10, tzinfo=UTC)),
+        _snapshot("Temp", 300, datetime(2026, 5, 6, 8, tzinfo=UTC)),
+        _snapshot("Temp", 250, datetime(2026, 5, 6, 10, tzinfo=UTC)),
+    ]
+
+    deltas = snapshot_deltas(
+        rows,
+        start_at=datetime(2026, 5, 6, 8, tzinfo=UTC),
+        end_at=datetime(2026, 5, 6, 10, tzinfo=UTC),
+    )
+
+    assert deltas[0].rule_name == "Downloads"
+    assert deltas[0].delta_bytes == 80
+    assert deltas[1].rule_name == "Temp"
+    assert deltas[1].delta_bytes == -50
+
+
+def test_investigation_windows_report_insufficient_snapshots():
+    windows = investigation_windows(
+        [_snapshot("Downloads", 100, datetime(2026, 5, 6, 8, tzinfo=UTC))],
+        now=datetime(2026, 5, 6, 10, tzinfo=UTC),
+    )
+
+    assert len(windows) == 4
+    assert all(not window.has_enough_data for window in windows)
+
+
+def _snapshot(rule_name: str, size_bytes: int, captured_at: datetime) -> dict[str, object]:
+    return {
+        "captured_at": format_time(captured_at),
+        "rule_name": rule_name,
+        "size_bytes": size_bytes,
+        "file_count": 1,
+        "privacy_mode": "detailed",
+        "exists_on_disk": 1,
+    }

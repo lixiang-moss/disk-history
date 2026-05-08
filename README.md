@@ -1,12 +1,8 @@
 # Disk History
 
-Disk History 是一个本地优先的桌面工具，用来记录磁盘空间随时间发生的变化。它的目标是帮你回答这类问题：
+Disk History 是一个本地优先的 **磁盘空间变化调查工具**。它持续记录目录大小快照和文件变化元数据，帮助你在发现磁盘突然少了几个 GB 时，回看“哪些目录在什么时间段变大了”。
 
-- 今天系统盘为什么变大了？
-- 最近几个小时哪些目录增长最多？
-- 增长大概率来自下载、临时文件、开发依赖、软件安装，还是系统更新？
-
-第一版以 Windows 为主要目标平台，使用 Python 开发。
+它不会替你自动下结论，也不会自动清理文件。它提供的是调查线索。
 
 ## 当前状态
 
@@ -14,13 +10,14 @@ Disk History 是一个本地优先的桌面工具，用来记录磁盘空间随�
 
 - PySide6 桌面界面，默认中文，并支持切换 English。
 - SQLite 本地数据库，默认存放在当前用户的本地应用数据目录。
-- 基于通用路径模板的默认监控规则，例如 `{USERPROFILE}` 和 `{LOCALAPPDATA}`，不会写死某一台电脑的个人路径。
-- 单次目录快照扫描。
-- 基于 `watchdog` 的基础文件变化记录。
+- 基于通用路径模板的默认监控规则，例如 `{USERPROFILE}` 和 `{LOCALAPPDATA}`。
+- 手动目录快照扫描。
+- GUI 中启动和停止实时文件变化监听。
+- 后台记录模式，可周期性记录目录快照。
+- 当前用户登录后自动启动选项，默认关闭。
+- 调查视图：最近 30 分钟、2 小时、今天、7 天的目录变化对比。
+- 目录占用排行、变化时间线、来源占比、活动热力图等辅助视图。
 - 详细记录、汇总记录、忽略三种隐私模式。
-- 可编辑的本地配置文件。
-- 目录占用排行、变化时间线、来源占比、活动热力图、清理建议等可视化视图。
-- 在 GUI 中启动和停止实时文件变化监听。
 
 ## 隐私模型
 
@@ -29,6 +26,7 @@ Disk History 按本地工具设计。
 - 不上传数据。
 - 不记录文件内容。
 - 不自动删除文件。
+- 不提供清理建议功能。
 - 敏感目录可以配置为只记录汇总变化，不记录具体文件名。
 - 本地数据库、日志和导出文件已经通过 `.gitignore` 排除，避免误提交到 Git。
 
@@ -56,7 +54,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-创建并显示本地配置文件路径。配置文件默认在 `%LOCALAPPDATA%\DiskHistory\settings.json`，用于保存监控规则、隐私模式和界面语言：
+创建并显示本地配置文件路径。配置文件默认在 `%LOCALAPPDATA%\DiskHistory\settings.json`，用于保存监控规则、隐私模式、界面语言、后台快照间隔和开机启动偏好：
 
 ```powershell
 .\.venv\Scripts\python.exe -m disk_history config-path
@@ -68,13 +66,21 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m disk_history scan
 ```
 
-打开桌面图形界面，用图表和表格查看扫描结果、时间线、来源占比、活动热力图和清理建议：
+打开桌面图形界面，用调查视图查看最近 30 分钟、2 小时、今天、7 天的目录变化：
 
 ```powershell
 .\.venv\Scripts\python.exe -m disk_history gui
 ```
 
+运行后台记录模式。它会启动实时监听，并按配置间隔记录目录快照：
+
+```powershell
+.\.venv\Scripts\python.exe -m disk_history background
+```
+
 打开 GUI 后，可以点击“开始实时监听”。实时监听只记录文件变化元数据，不读取文件内容，也不会删除文件。需要暂停时点击“停止实时监听”。
+
+如果希望登录 Windows 后自动记录，可以在“设置”页开启“随开机启动”。第一版只为当前用户创建启动项，不安装系统服务，也不要求管理员权限。
 
 这些命令会生成本地运行数据，例如 SQLite 数据库和配置文件。它们位于 `%LOCALAPPDATA%\DiskHistory\`，不会被提交到 GitHub。
 
@@ -84,6 +90,7 @@ python -m venv .venv
 
 ## 开发文档
 
+- [产品需求说明](docs/PRODUCT_REQUIREMENTS.md)
 - [开发记录](docs/DEVELOPMENT.md)
 - [架构说明](docs/ARCHITECTURE.md)
 - [安全与隐私](docs/SECURITY.md)

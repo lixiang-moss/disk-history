@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
-from threading import RLock
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from typing import Iterable
 
 from disk_history.config import database_path, ensure_data_dir
@@ -184,6 +184,34 @@ class DiskHistoryDatabase:
                 AND ds.captured_at = latest.captured_at
                 ORDER BY ds.size_bytes DESC
                 """
+            )
+            return list(cursor.fetchall())
+
+    def snapshot_history(self, limit: int = 10000) -> list[sqlite3.Row]:
+        with self._lock:
+            cursor = self.connection.execute(
+                """
+                SELECT *
+                FROM directory_snapshots
+                ORDER BY captured_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            return list(cursor.fetchall())
+
+    def events_between(self, start_at: datetime, end_at: datetime, limit: int = 500) -> list[sqlite3.Row]:
+        with self._lock:
+            cursor = self.connection.execute(
+                """
+                SELECT *
+                FROM file_events
+                WHERE happened_at >= ?
+                  AND happened_at <= ?
+                ORDER BY happened_at DESC, id DESC
+                LIMIT ?
+                """,
+                (format_time(start_at), format_time(end_at), limit),
             )
             return list(cursor.fetchall())
 

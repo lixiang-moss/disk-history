@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("scan", help="Capture one directory size snapshot.")
     subparsers.add_parser("recent", help="Show recent recorded filesystem events.")
     subparsers.add_parser("watch", help="Run the filesystem watcher in the foreground.")
+    subparsers.add_parser("background", help="Run background snapshots and live monitoring.")
     subparsers.add_parser("gui", help="Open the desktop interface.")
 
     args = parser.parse_args(argv)
@@ -63,6 +64,12 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_settings()
         run_watcher(db, settings.monitor_rules, settings.ignore_patterns)
         return 0
+
+    if command == "background":
+        from disk_history.background import run_background
+
+        db.close()
+        return run_background()
 
     parser.print_help()
     return 2
