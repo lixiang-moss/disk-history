@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from PySide6.QtCharts import (
     QBarCategoryAxis,
@@ -14,12 +14,13 @@ from PySide6.QtCharts import (
     QPieSeries,
     QValueAxis,
 )
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QDateTime, QTimer, Qt
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDateTimeEdit,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -39,6 +40,7 @@ from PySide6.QtWidgets import (
 
 from disk_history.analytics import (
     category_growth,
+    build_investigation_window,
     directory_rankings,
     heatmap_cells,
     investigation_windows,
@@ -72,6 +74,7 @@ class MainWindow(QMainWindow):
         self.language = normalize_language(self.settings.language)
         self.watcher: DiskHistoryWatcher | None = None
         self.notifier = TrayNotifier()
+        self.custom_investigation_range: tuple[datetime, datetime] | None = None
         self.refresh_timer = QTimer(self)
         self.refresh_timer.setInterval(3000)
         self.refresh_timer.timeout.connect(self.refresh_all)
@@ -166,6 +169,28 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(widget)
         layout.addWidget(QLabel(self.t("label.snapshot_evidence")))
 
+        custom_range_row = QHBoxLayout()
+        self.custom_start_edit = QDateTimeEdit()
+        self.custom_start_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.custom_start_edit.setCalendarPopup(True)
+        self.custom_end_edit = QDateTimeEdit()
+        self.custom_end_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.custom_end_edit.setCalendarPopup(True)
+        now = QDateTime.currentDateTime()
+        self.custom_start_edit.setDateTime(now.addSecs(-2 * 60 * 60))
+        self.custom_end_edit.setDateTime(now)
+        self.apply_custom_range_button = QPushButton(self.t("button.apply_time_range"))
+        self.apply_custom_range_button.clicked.connect(self.apply_custom_investigation_range)
+        self.custom_range_status_label = QLabel()
+        custom_range_row.addWidget(QLabel(self.t("label.custom_start_time")))
+        custom_range_row.addWidget(self.custom_start_edit)
+        custom_range_row.addWidget(QLabel(self.t("label.custom_end_time")))
+        custom_range_row.addWidget(self.custom_end_edit)
+        custom_range_row.addWidget(self.apply_custom_range_button)
+        custom_range_row.addWidget(self.custom_range_status_label)
+        custom_range_row.addStretch(1)
+        layout.addLayout(custom_range_row)
+
         self.investigation_summary = QTextEdit()
         self.investigation_summary.setReadOnly(True)
         self.investigation_summary.setMaximumHeight(120)
@@ -184,7 +209,8 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self.investigation_table)
 
-        layout.addWidget(QLabel(self.t("label.event_evidence")))
+        self.event_evidence_label = QLabel(self.t("label.event_evidence"))
+        layout.addWidget(self.event_evidence_label)
         self.investigation_event_table = QTableWidget(0, 5)
         self.investigation_event_table.setHorizontalHeaderLabels(
             [
@@ -459,6 +485,32 @@ class MainWindow(QMainWindow):
             for delta in window.deltas:
                 table_rows.append((window_label, delta))
 
+        if self.custom_investigation_range is not None:
+            start_at, end_at = self.custom_investigation_range
+            custom_window = build_investigation_window(
+                snapshot_rows,
+                label_key="window.custom",
+                start_at=start_at,
+                end_at=end_at,
+            )
+            custom_label = self.t("window.custom")
+            if custom_window.has_enough_data:
+                summary_lines.append(
+                    self.t(
+                        "investigation.summary",
+                        window=custom_label,
+                        delta=format_bytes(custom_window.net_delta_bytes),
+                        start=custom_window.start_at.strftime("%Y-%m-%d %H:%M"),
+                        end=custom_window.end_at.strftime("%Y-%m-%d %H:%M"),
+                    )
+                )
+                for delta in custom_window.deltas:
+                    table_rows.append((custom_label, delta))
+            else:
+                summary_lines.append(
+                    self.t("investigation.not_enough_data", window=custom_label)
+                )
+
         self.investigation_summary.setPlainText("\n".join(summary_lines))
         self.investigation_table.setRowCount(len(table_rows))
         for row_index, (window_label, delta) in enumerate(table_rows):
@@ -477,7 +529,13 @@ class MainWindow(QMainWindow):
                 self.investigation_table.setItem(row_index, column, item)
         self.investigation_table.resizeColumnsToContents()
 
-        recent_events = self.database.events_between(windows[1].start_at, windows[1].end_at, limit=200)
+        event_start, event_end = windows[1].start_at, windows[1].end_at
+        if self.custom_investigation_range is not None:
+            event_start, event_end = self.custom_investigation_range
+            self.event_evidence_label.setText(self.t("label.event_evidence_custom"))
+        else:
+            self.event_evidence_label.setText(self.t("label.event_evidence"))
+        recent_events = self.database.events_between(event_start, event_end, limit=200)
         self.investigation_event_table.setRowCount(len(recent_events))
         for row_index, row in enumerate(recent_events):
             values = [
@@ -490,6 +548,16 @@ class MainWindow(QMainWindow):
             for column, value in enumerate(values):
                 self.investigation_event_table.setItem(row_index, column, QTableWidgetItem(value))
         self.investigation_event_table.resizeColumnsToContents()
+
+    def apply_custom_investigation_range(self) -> None:
+        start_at = _qdatetime_to_utc(self.custom_start_edit.dateTime())
+        end_at = _qdatetime_to_utc(self.custom_end_edit.dateTime())
+        if start_at >= end_at:
+            self.custom_range_status_label.setText(self.t("label.time_range_error"))
+            return
+        self.custom_investigation_range = (start_at, end_at)
+        self.custom_range_status_label.setText(self.t("label.time_range_applied"))
+        self.refresh_all()
 
     def _refresh_directory_chart(self, rows) -> None:
         rankings = directory_rankings(rows)
@@ -837,6 +905,13 @@ def _check_item(checked: bool) -> QTableWidgetItem:
 
 def _item_checked(item: QTableWidgetItem | None) -> bool:
     return item is not None and item.checkState() == Qt.Checked
+
+
+def _qdatetime_to_utc(value: QDateTime) -> datetime:
+    converted = value.toUTC().toPython()
+    if converted.tzinfo is None:
+        return converted.replace(tzinfo=UTC)
+    return converted.astimezone(UTC)
 
 
 def _heat_color(intensity: float) -> QColor:

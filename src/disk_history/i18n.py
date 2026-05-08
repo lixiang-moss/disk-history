@@ -29,9 +29,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.add_rule": "添加监控规则",
         "button.remove_rule": "删除选中规则",
         "button.choose_rule_directory": "选择监控目录...",
+        "button.apply_time_range": "应用时间范围",
         "label.product_focus": "定位：记录磁盘空间变化证据，帮助你自己分析原因。",
         "label.snapshot_evidence": "快照对比证据",
         "label.event_evidence": "文件事件辅助线索（最近 2 小时）",
+        "label.event_evidence_custom": "文件事件辅助线索（自定义时间范围）",
         "label.local_database": "本地数据库：{path}",
         "label.data_folder": "数据目录：{path}",
         "label.settings_file": "配置文件：{path}",
@@ -59,6 +61,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.rule_select_first": "请先选中一条监控规则。",
         "label.rule_error_empty_name": "第 {row} 条监控规则的名称不能为空。",
         "label.rule_error_empty_path": "第 {row} 条监控规则的路径不能为空。",
+        "label.custom_start_time": "起始时间",
+        "label.custom_end_time": "结束时间",
+        "label.time_range_error": "起始时间必须早于结束时间。",
+        "label.time_range_applied": "已应用。",
         "label.privacy_intro": (
             "Disk History 只记录元数据。\n\n"
             "详细记录：保存具体路径和大小变化。\n"
@@ -78,6 +84,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "window.2_hours": "最近 2 小时",
         "window.today": "今天",
         "window.7_days": "最近 7 天",
+        "window.custom": "自定义范围",
         "chart.size_mb": "大小（MB）",
         "chart.delta_mb": "变化量（MB）",
         "chart.hour_index": "最近 24 小时",
@@ -131,9 +138,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "button.add_rule": "Add Monitor Rule",
         "button.remove_rule": "Remove Selected Rule",
         "button.choose_rule_directory": "Choose Monitor Folder...",
+        "button.apply_time_range": "Apply Time Range",
         "label.product_focus": "Focus: record disk space evidence so you can analyze the cause.",
         "label.snapshot_evidence": "Snapshot Comparison Evidence",
         "label.event_evidence": "File Event Clues (Last 2 Hours)",
+        "label.event_evidence_custom": "File Event Clues (Custom Time Range)",
         "label.local_database": "Local database: {path}",
         "label.data_folder": "Data folder: {path}",
         "label.settings_file": "Settings file: {path}",
@@ -161,6 +170,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "label.rule_select_first": "Select a monitor rule first.",
         "label.rule_error_empty_name": "Monitor rule {row} needs a name.",
         "label.rule_error_empty_path": "Monitor rule {row} needs a path.",
+        "label.custom_start_time": "Start time",
+        "label.custom_end_time": "End time",
+        "label.time_range_error": "Start time must be before end time.",
+        "label.time_range_applied": "Applied.",
         "label.privacy_intro": (
             "Disk History records metadata only.\n\n"
             "Detailed mode stores concrete paths and size changes.\n"
@@ -180,6 +193,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "window.2_hours": "Last 2 Hours",
         "window.today": "Today",
         "window.7_days": "Last 7 Days",
+        "window.custom": "Custom Range",
         "chart.size_mb": "Size (MB)",
         "chart.delta_mb": "Delta (MB)",
         "chart.hour_index": "Last 24 Hours",

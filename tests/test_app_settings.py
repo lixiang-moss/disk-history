@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QDateTime
 from PySide6.QtWidgets import QApplication
 
 from disk_history.app import MainWindow
@@ -72,6 +73,31 @@ def test_gui_rejects_monitor_rule_without_path(monkeypatch, tmp_path):
     window.save_runtime_settings()
 
     assert "路径不能为空" in window.settings_status_label.text()
+
+    window.close()
+    app.processEvents()
+
+
+def test_gui_applies_custom_investigation_range(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    end = QDateTime.currentDateTime()
+    start = end.addSecs(-3600)
+    window.custom_start_edit.setDateTime(start)
+    window.custom_end_edit.setDateTime(end)
+    window.apply_custom_investigation_range()
+
+    assert window.custom_investigation_range is not None
+    assert window.custom_range_status_label.text()
+
+    window.custom_start_edit.setDateTime(end)
+    window.custom_end_edit.setDateTime(start)
+    window.apply_custom_investigation_range()
+
+    assert "早于" in window.custom_range_status_label.text()
 
     window.close()
     app.processEvents()
