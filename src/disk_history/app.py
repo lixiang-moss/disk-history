@@ -18,12 +18,17 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
+    QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -249,22 +254,51 @@ class MainWindow(QMainWindow):
 
         self.startup_status_label = QLabel()
         layout.addWidget(self.startup_status_label)
-        layout.addWidget(
-            QLabel(
-                self.t(
-                    "label.background_interval",
-                    minutes=self.settings.background_snapshot_interval_minutes,
-                )
-            )
+
+        settings_form = QFormLayout()
+        self.background_interval_spin = QSpinBox()
+        self.background_interval_spin.setRange(1, 1440)
+        self.background_interval_spin.setValue(self.settings.background_snapshot_interval_minutes)
+        settings_form.addRow(self.t("label.background_interval_edit"), self.background_interval_spin)
+
+        self.log_directory_edit = QLineEdit(self.settings.log_directory)
+        log_directory_widget = QWidget()
+        log_directory_row = QHBoxLayout(log_directory_widget)
+        log_directory_row.setContentsMargins(0, 0, 0, 0)
+        log_directory_row.addWidget(self.log_directory_edit)
+        self.browse_log_button = QPushButton(self.t("button.browse"))
+        self.browse_log_button.clicked.connect(self.choose_log_directory)
+        log_directory_row.addWidget(self.browse_log_button)
+        settings_form.addRow(self.t("label.log_directory_edit"), log_directory_widget)
+
+        self.enable_growth_alerts_check = QCheckBox(self.t("label.enable_growth_alerts"))
+        self.enable_growth_alerts_check.setChecked(self.settings.enable_growth_alerts)
+        settings_form.addRow("", self.enable_growth_alerts_check)
+
+        self.alert_window_spin = QSpinBox()
+        self.alert_window_spin.setRange(1, 10080)
+        self.alert_window_spin.setValue(self.settings.alert_window_minutes)
+        settings_form.addRow(self.t("label.alert_window_edit"), self.alert_window_spin)
+
+        self.alert_threshold_spin = QSpinBox()
+        self.alert_threshold_spin.setRange(1, 10_000_000)
+        self.alert_threshold_spin.setValue(self.settings.alert_growth_threshold_mb)
+        settings_form.addRow(self.t("label.alert_threshold_edit"), self.alert_threshold_spin)
+        layout.addLayout(settings_form)
+
+        settings_row = QHBoxLayout()
+        self.save_settings_button = QPushButton(self.t("button.save_settings"))
+        self.save_settings_button.clicked.connect(self.save_runtime_settings)
+        self.settings_status_label = QLabel()
+        settings_row.addWidget(self.save_settings_button)
+        settings_row.addWidget(self.settings_status_label)
+        settings_row.addStretch(1)
+        layout.addLayout(settings_row)
+
+        self.log_directory_resolved_label = QLabel(
+            self.t("label.log_directory_resolved", path=resolved_log_directory(self.settings))
         )
-        self.log_directory_label = QLabel()
-        self.alerts_enabled_label = QLabel()
-        self.alert_window_label = QLabel()
-        self.alert_threshold_label = QLabel()
-        layout.addWidget(self.log_directory_label)
-        layout.addWidget(self.alerts_enabled_label)
-        layout.addWidget(self.alert_window_label)
-        layout.addWidget(self.alert_threshold_label)
+        layout.addWidget(self.log_directory_resolved_label)
         startup_row = QHBoxLayout()
         self.enable_startup_button = QPushButton(self.t("button.enable_startup"))
         self.enable_startup_button.clicked.connect(self.enable_startup)
@@ -365,7 +399,6 @@ class MainWindow(QMainWindow):
         self._refresh_sources_chart(events)
         self._refresh_heatmap(events)
         self._refresh_startup_status()
-        self._refresh_log_settings()
 
     def _refresh_snapshots(self, rows) -> None:
         self.snapshot_table.setRowCount(len(rows))
@@ -601,28 +634,45 @@ class MainWindow(QMainWindow):
         self.enable_startup_button.setEnabled(not enabled)
         self.disable_startup_button.setEnabled(enabled)
 
-    def _refresh_log_settings(self) -> None:
-        if not hasattr(self, "log_directory_label"):
-            return
-        self.settings = load_settings()
-        self.log_directory_label.setText(
-            self.t("label.log_directory", path=resolved_log_directory(self.settings))
-        )
-        self.alerts_enabled_label.setText(
-            self.t(
-                "label.alerts_enabled",
-                status=self.t("yes") if self.settings.enable_growth_alerts else self.t("no"),
-            )
-        )
-        self.alert_window_label.setText(
-            self.t("label.alert_window", minutes=self.settings.alert_window_minutes)
-        )
-        self.alert_threshold_label.setText(
-            self.t("label.alert_threshold", mb=self.settings.alert_growth_threshold_mb)
-        )
-
     def _excluded_roots(self):
         return (resolved_log_directory(self.settings),)
+
+    def choose_log_directory(self) -> None:
+        current = str(resolved_log_directory(self.settings))
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            self.t("dialog.choose_log_directory"),
+            current,
+        )
+        if selected:
+            self.log_directory_edit.setText(selected)
+
+    def save_runtime_settings(self) -> None:
+        log_directory = self.log_directory_edit.text().strip()
+        if not log_directory:
+            self.settings_status_label.setText(self.t("label.settings_error_empty_log_directory"))
+            return
+
+        was_monitoring = self.watcher is not None and self.watcher.is_running
+        if was_monitoring:
+            self.stop_monitoring()
+
+        self.settings = replace(
+            self.settings,
+            background_snapshot_interval_minutes=self.background_interval_spin.value(),
+            log_directory=log_directory,
+            enable_growth_alerts=self.enable_growth_alerts_check.isChecked(),
+            alert_window_minutes=self.alert_window_spin.value(),
+            alert_growth_threshold_mb=self.alert_threshold_spin.value(),
+        )
+        save_settings(self.settings)
+        self.settings_status_label.setText(self.t("label.settings_saved"))
+        self.log_directory_resolved_label.setText(
+            self.t("label.log_directory_resolved", path=resolved_log_directory(self.settings))
+        )
+
+        if was_monitoring:
+            self.start_monitoring()
 
     def _write_activity_logs_and_alert(self, snapshots) -> None:
         writer = activity_log_writer(self.settings)
