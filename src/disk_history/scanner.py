@@ -20,6 +20,7 @@ from disk_history.database import (
     TreeSnapshot,
     utc_now,
 )
+from disk_history.focus_targets import is_focus_target_expired, normalized_focus_target
 from disk_history.paths import is_path_excluded
 
 
@@ -169,8 +170,9 @@ def capture_focus_snapshots(
 ) -> list[FocusSnapshot]:
     captured_at = utc_now()
     snapshots: list[FocusSnapshot] = []
-    for target in focus_targets:
-        if not bool(target.get("enabled", True)):
+    for index, target in enumerate(focus_targets):
+        target = normalized_focus_target(target, index=index, default_depth=max_depth)
+        if not bool(target.get("enabled", True)) or is_focus_target_expired(target):
             continue
         target_id = str(target.get("id") or target.get("name") or target.get("path_template"))
         target_name = str(target.get("name") or target_id)

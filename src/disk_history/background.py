@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import time
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from disk_history.activity_log import activity_log_writer, detect_growth_alert
-from disk_history.config import expand_path_template
-from disk_history.database import DiskHistoryDatabase
+from disk_history.database import DiskHistoryDatabase, GrowthAlertRecord
+from disk_history.focus_targets import active_focus_roots
 from disk_history.focus_log import FocusLogWriter
 from disk_history.notifications import TrayNotifier
 from disk_history.scanner import (
@@ -128,6 +129,17 @@ class BackgroundRecorder:
             return
 
         self.log_writer.append_alert(alert)
+        self.database.insert_growth_alert(
+            GrowthAlertRecord(
+                happened_at=alert.happened_at,
+                scope="directory",
+                subject="monitored_rules",
+                window_minutes=alert.window_minutes,
+                threshold_bytes=alert.threshold_bytes,
+                net_growth_bytes=alert.net_growth_bytes,
+                details_json=json.dumps(alert.top_growth, ensure_ascii=False),
+            )
+        )
         if notifier is not None:
             notifier.show_message(
                 "Disk History",
@@ -160,14 +172,7 @@ class BackgroundRecorder:
 
 
 def focus_roots_from_settings(settings: AppSettings) -> tuple[Path, ...]:
-    roots: list[Path] = []
-    for target in settings.focus_targets:
-        if not bool(target.get("enabled", True)):
-            continue
-        path_template = str(target.get("path_template") or target.get("path") or "")
-        if path_template:
-            roots.append(expand_path_template(path_template))
-    return tuple(roots)
+    return active_focus_roots(settings.focus_targets)
 
 
 def run_background() -> int:

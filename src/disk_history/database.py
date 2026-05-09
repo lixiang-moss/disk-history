@@ -76,6 +76,17 @@ class FocusSnapshot:
     error_count: int
 
 
+@dataclass(frozen=True)
+class GrowthAlertRecord:
+    happened_at: datetime
+    scope: str
+    subject: str
+    window_minutes: int
+    threshold_bytes: int
+    net_growth_bytes: int
+    details_json: str
+
+
 class DiskHistoryDatabase:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or database_path()
@@ -383,6 +394,19 @@ class DiskHistoryDatabase:
             )
             return list(cursor.fetchall())
 
+    def drive_snapshot_history(self, limit: int = 10000) -> list[sqlite3.Row]:
+        with self._lock:
+            cursor = self.connection.execute(
+                """
+                SELECT *
+                FROM drive_snapshots
+                ORDER BY captured_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            return list(cursor.fetchall())
+
     def latest_tree_snapshots(self, limit: int = 1000) -> list[sqlite3.Row]:
         with self._lock:
             cursor = self.connection.execute(
@@ -423,6 +447,41 @@ class DiskHistoryDatabase:
                 SELECT *
                 FROM tree_snapshots
                 ORDER BY captured_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            return list(cursor.fetchall())
+
+    def insert_growth_alert(self, alert: GrowthAlertRecord) -> None:
+        with self._lock:
+            self.connection.execute(
+                """
+                INSERT INTO growth_alerts (
+                    happened_at, scope, subject, window_minutes,
+                    threshold_bytes, net_growth_bytes, details_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    format_time(alert.happened_at),
+                    alert.scope,
+                    alert.subject,
+                    alert.window_minutes,
+                    alert.threshold_bytes,
+                    alert.net_growth_bytes,
+                    alert.details_json,
+                ),
+            )
+            self.connection.commit()
+
+    def recent_growth_alerts(self, limit: int = 500) -> list[sqlite3.Row]:
+        with self._lock:
+            cursor = self.connection.execute(
+                """
+                SELECT *
+                FROM growth_alerts
+                ORDER BY happened_at DESC, id DESC
                 LIMIT ?
                 """,
                 (limit,),

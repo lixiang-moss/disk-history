@@ -15,6 +15,7 @@ from disk_history.config import (
     existing_fixed_drives,
     expand_path_template,
 )
+from disk_history.focus_targets import normalized_focus_target
 
 
 SETTINGS_NAME = "settings.json"
@@ -87,7 +88,16 @@ def load_settings(create_if_missing: bool = True) -> AppSettings:
     monitor_rules = tuple(MonitorRule.from_dict(item) for item in raw.get("monitor_rules", []))
     ignore_patterns = tuple(str(item) for item in raw.get("ignore_patterns", []))
     noise_rules = tuple(NoiseRule.from_dict(item) for item in raw.get("noise_rules", []))
-    focus_targets = tuple(dict(item) for item in raw.get("focus_targets", []))
+    focus_targets = tuple(
+        normalized_focus_target(
+            dict(item),
+            index=index,
+            default_depth=max(1, int(raw.get("focus_tree_depth", 8))),
+            default_interval_minutes=max(1, int(raw.get("focus_snapshot_interval_minutes", 1))),
+            default_ttl_hours=max(1, int(raw.get("focus_default_ttl_hours", 24))),
+        )
+        for index, item in enumerate(raw.get("focus_targets", []))
+    )
     needs_save = any(
         key not in raw
         for key in (

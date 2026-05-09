@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QDateTime
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from disk_history.app import MainWindow
@@ -90,6 +91,32 @@ def test_gui_saves_noise_and_focus_rules(monkeypatch, tmp_path):
     assert settings.noise_rules[0].path_template == "build"
     assert settings.focus_targets[0]["name"] == "Focus"
     assert settings.focus_targets[0]["path_template"] == str(focus)
+    assert "created_at" in settings.focus_targets[0]
+
+    window.close()
+    app.processEvents()
+
+
+def test_gui_noise_and_focus_controls(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    original_noise_count = window.noise_table.rowCount()
+    window.add_noise_rule()
+    assert window.noise_table.rowCount() == original_noise_count + 1
+    window.noise_table.setCurrentCell(window.noise_table.rowCount() - 1, 1)
+    window.remove_selected_noise_rule()
+    assert window.noise_table.rowCount() == original_noise_count
+
+    window.focus_table.setRowCount(0)
+    window.add_focus_target()
+    window.focus_table.setCurrentCell(0, 1)
+    window.pause_selected_focus_target()
+    assert window.focus_table.item(0, 0).checkState() == Qt.Unchecked
+    window.resume_selected_focus_target()
+    assert window.focus_table.item(0, 0).checkState() == Qt.Checked
 
     window.close()
     app.processEvents()

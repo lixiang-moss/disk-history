@@ -319,6 +319,70 @@ TRANSLATIONS["en"].update(
     }
 )
 
+TRANSLATIONS["zh-CN"].update(
+    {
+        "tab.growth": "快速增长",
+        "button.add_noise": "添加噪音目录",
+        "button.remove_noise": "删除选中噪音目录",
+        "button.choose_noise_directory": "选择噪音目录...",
+        "button.pause_focus": "暂停重点监控",
+        "button.resume_focus": "恢复重点监控",
+        "button.open_focus_logs": "打开重点日志目录",
+        "label.drive_trend_subject": "磁盘趋势",
+        "label.tree_trend_subject": "目录趋势",
+        "label.growth_intro": "这里集中显示快速增长提醒，以及从目录树快照推导出的增长线索。",
+        "label.derived_growth_detail": "由目录树历史快照推导",
+        "label.noise_select_first": "请先选中一个噪音目录规则。",
+        "label.focus_log_open_error": "打开重点监控日志目录失败：{message}",
+        "table.status": "状态",
+        "table.remaining": "剩余时间",
+        "table.scope": "范围",
+        "table.subject": "对象",
+        "table.threshold": "阈值",
+        "table.details": "详情",
+        "chart.drive_trend": "磁盘已用空间趋势",
+        "chart.tree_trend": "目录大小趋势",
+        "chart.point_index": "记录点",
+        "focus_status.active": "运行中",
+        "focus_status.paused": "已暂停",
+        "focus_status.expired": "已过期",
+        "default.noise_rule_name": "自定义噪音目录",
+        "dialog.choose_noise_directory": "选择噪音目录",
+    }
+)
+
+TRANSLATIONS["en"].update(
+    {
+        "tab.growth": "Fast Growth",
+        "button.add_noise": "Add Noise Folder",
+        "button.remove_noise": "Remove Selected Noise",
+        "button.choose_noise_directory": "Choose Noise Folder...",
+        "button.pause_focus": "Pause Focus",
+        "button.resume_focus": "Resume Focus",
+        "button.open_focus_logs": "Open Focus Logs",
+        "label.drive_trend_subject": "Drive trend",
+        "label.tree_trend_subject": "Directory trend",
+        "label.growth_intro": "Fast growth alerts and growth clues derived from directory tree snapshots.",
+        "label.derived_growth_detail": "Derived from directory tree history",
+        "label.noise_select_first": "Select a noise rule first.",
+        "label.focus_log_open_error": "Failed to open focus log directory: {message}",
+        "table.status": "Status",
+        "table.remaining": "Remaining",
+        "table.scope": "Scope",
+        "table.subject": "Subject",
+        "table.threshold": "Threshold",
+        "table.details": "Details",
+        "chart.drive_trend": "Drive Used Space Trend",
+        "chart.tree_trend": "Directory Size Trend",
+        "chart.point_index": "Point",
+        "focus_status.active": "Active",
+        "focus_status.paused": "Paused",
+        "focus_status.expired": "Expired",
+        "default.noise_rule_name": "Custom Noise Folder",
+        "dialog.choose_noise_directory": "Choose Noise Folder",
+    }
+)
+
 
 def normalize_language(language: str | None) -> str:
     if language in SUPPORTED_LANGUAGES:

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from disk_history.config import MonitorRule, NoiseRule
 from disk_history.scanner import (
     TreeRoot,
@@ -115,3 +117,26 @@ def test_focus_snapshots_use_deeper_depth(tmp_path):
     )
 
     assert {snapshot.relative_path for snapshot in snapshots} == {".", "a", r"a\b"}
+
+
+def test_focus_snapshots_skip_expired_targets(tmp_path):
+    root = tmp_path / "focus"
+    root.mkdir()
+    (root / "file.bin").write_bytes(b"abc")
+    expired_at = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+
+    snapshots = capture_focus_snapshots(
+        (
+            {
+                "id": "case-1",
+                "name": "Case",
+                "path_template": str(root),
+                "enabled": True,
+                "max_depth": 2,
+                "expires_at": expired_at,
+            },
+        ),
+        max_depth=8,
+    )
+
+    assert snapshots == []

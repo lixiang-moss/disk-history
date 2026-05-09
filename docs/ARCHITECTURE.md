@@ -219,3 +219,43 @@ GUI 里的实时监听使用 `watcher.py` 中的 `DiskHistoryWatcher` 控制。
 - 使用 SQLite 是因为它不需要单独安装数据库服务，适合本地桌面工具。
 - 使用 QtCharts 是因为它随 PySide6 一起工作，第一版不用额外学习前端图表生态。
 - 暂不使用 C++ 或 NTFS USN Journal，避免第一版过早进入复杂的 Windows 底层开发。
+## 0.3 可用性补强数据流
+
+0.3 阶段把“盘符 + 目录树 + 实时事件 + 重点监控”的模型进一步拆清楚：
+
+```text
+settings.json
+  -> 普通监控规则 monitor_rules
+  -> 噪音目录规则 noise_rules
+  -> 重点监控名单 focus_targets
+
+scanner.py
+  -> drive_snapshots：记录 C:、D: 等盘符整体容量
+  -> tree_snapshots：记录普通目录最多 4 层目录树
+  -> focus_snapshots：记录重点监控目录更深层快照
+
+watcher.py / background.py
+  -> file_events：普通实时事件
+  -> focus_events：重点监控事件
+  -> growth_alerts：快速增长提醒
+
+trends.py
+  -> 盘符趋势
+  -> 目录趋势
+  -> 最近目录增长线索
+
+app.py
+  -> 磁盘页、目录树页、实时事件页、噪音目录页、重点监控页、快速增长页
+```
+
+新增模块职责：
+
+- `focus_targets.py`：负责重点监控目标的默认值补齐、启用/暂停/过期判断、剩余时间显示和后台监听根目录过滤。
+- `trends.py`：负责把 SQLite 中的盘符快照和目录树快照整理成 GUI 图表可直接使用的数据点。
+- `growth_alerts` 数据表：保存短时间增长超过阈值的记录，供 GUI 和后续报告功能读取。
+
+设计取舍：
+
+- 重点监控目标默认 24 小时后过期，是为了避免用户临时调查目录后忘记关闭，导致长期高负载。
+- 噪音目录仍然不写实时事件，因为这类目录的单个事件通常没有分析价值，真正重要的是一段时间内净增长是否异常。
+- 趋势图第一版用快照序号作为横轴，不直接使用时间轴。这样实现简单、稳定，后续可以再升级成真正的时间坐标和缩放交互。

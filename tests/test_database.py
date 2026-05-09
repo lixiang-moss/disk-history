@@ -1,7 +1,14 @@
 from datetime import UTC, datetime
 from threading import Thread
 
-from disk_history.database import DiskHistoryDatabase, DriveSnapshot, FileEvent, FocusSnapshot, TreeSnapshot
+from disk_history.database import (
+    DiskHistoryDatabase,
+    DriveSnapshot,
+    FileEvent,
+    FocusSnapshot,
+    GrowthAlertRecord,
+    TreeSnapshot,
+)
 
 
 def test_database_inserts_and_reads_event(tmp_path):
@@ -122,6 +129,7 @@ def test_database_stores_drive_tree_and_focus_snapshots(tmp_path):
 
     assert db.latest_drive_snapshots()[0]["used_bytes"] == 40
     assert db.latest_tree_snapshots()[0]["strategy"] == "standard"
+    assert db.drive_snapshot_history()[0]["drive"] == "C:"
     db.close()
 
 
@@ -156,4 +164,29 @@ def test_database_filters_events_by_source_strategy(tmp_path):
 
     assert len(rows) == 1
     assert rows[0]["category"] == "focus"
+    db.close()
+
+
+def test_database_stores_growth_alerts(tmp_path):
+    db = DiskHistoryDatabase(tmp_path / "alerts.sqlite3")
+    db.initialize()
+    happened_at = datetime(2026, 5, 6, tzinfo=UTC)
+
+    db.insert_growth_alert(
+        GrowthAlertRecord(
+            happened_at=happened_at,
+            scope="directory",
+            subject="Project",
+            window_minutes=30,
+            threshold_bytes=1024,
+            net_growth_bytes=2048,
+            details_json="[]",
+        )
+    )
+
+    rows = db.recent_growth_alerts()
+
+    assert len(rows) == 1
+    assert rows[0]["subject"] == "Project"
+    assert rows[0]["net_growth_bytes"] == 2048
     db.close()
