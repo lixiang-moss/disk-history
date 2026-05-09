@@ -1,5 +1,43 @@
 # 架构说明
 
+## 2026-05-09 架构补充：三层监控模型
+
+当前架构把监控分成三层：
+
+- 普通实时监控：`watcher.py` 使用 `watchdog` 记录普通目录的文件事件；`scanner.py` 同时定期生成盘容量快照和最多 4 层目录树快照。
+- 噪音目录间隔监控：噪音规则由 `settings.py` 保存，`watcher.py` 在实时事件阶段过滤这些目录，`scanner.py` 使用 `noise_snapshot_only` 策略记录短间隔大小快照。
+- 重点监控名单：用户手动添加目标后，`watcher.py` 继续实时记录该目录事件并标记为 `focus`，`scanner.py` 生成更深层快照，`focus_log.py` 写入独立日志。
+
+新增数据表职责：
+
+- `drive_snapshots`：记录盘符、总容量、已用空间和可用空间。
+- `tree_snapshots`：记录普通目录树和噪音目录的大小快照，包含深度和策略。
+- `focus_snapshots`：记录重点监控目标的深层快照。
+- `file_events.source_strategy`：区分普通实时事件和重点监控事件。
+- `growth_alerts`：预留快速增长提醒的结构化入库空间，当前主要提醒仍写入按日日志。
+
+新的数据流：
+
+```text
+普通目录
+  -> watcher.py 实时事件
+  -> file_events(source_strategy=standard)
+  -> scanner.py 4 层目录树快照
+  -> tree_snapshots(strategy=standard)
+
+噪音目录
+  -> watcher.py 过滤实时事件
+  -> scanner.py 3 分钟间隔快照
+  -> tree_snapshots(strategy=noise_snapshot_only)
+
+重点监控目录
+  -> watcher.py 实时事件
+  -> file_events(source_strategy=focus)
+  -> scanner.py 8 层快照
+  -> focus_snapshots
+  -> focus_log.py 独立日志
+```
+
 Disk History 被拆分成多个小模块，方便新手理解每一部分的职责。
 
 ## 主流程

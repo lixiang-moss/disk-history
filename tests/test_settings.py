@@ -17,6 +17,14 @@ def test_load_settings_creates_default_config(monkeypatch, tmp_path):
     assert settings.enable_growth_alerts is True
     assert settings.alert_window_minutes == 30
     assert settings.alert_growth_threshold_mb == 5120
+    assert settings.drive_monitoring_enabled is True
+    assert settings.standard_realtime_enabled is True
+    assert settings.standard_tree_depth == 4
+    assert settings.noise_snapshot_interval_minutes == 3
+    assert settings.focus_monitoring_enabled is True
+    assert settings.focus_tree_depth == 8
+    assert settings.focus_default_ttl_hours == 24
+    assert settings.noise_rules
     assert settings_path().exists()
 
 
@@ -59,6 +67,24 @@ def test_load_settings_reads_monitor_rules(monkeypatch, tmp_path):
     assert settings.enable_growth_alerts is False
     assert settings.alert_window_minutes == 45
     assert settings.alert_growth_threshold_mb == 2048
+
+
+def test_load_settings_accepts_utf8_bom(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    settings_path().write_text(
+        "\ufeff"
+        + json.dumps(
+            {
+                "monitor_rules": [],
+                "ignore_patterns": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(create_if_missing=False)
+
+    assert settings.language == "zh-CN"
 
 
 def test_load_settings_migrates_missing_language(monkeypatch, tmp_path):

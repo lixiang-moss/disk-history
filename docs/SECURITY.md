@@ -1,5 +1,18 @@
 # 安全与隐私
 
+## 2026-05-09 数据目录排除规则
+
+即使当前默认设计不再以隐私风险作为主要限制，Disk History 仍然强制排除自身运行数据目录，包括：
+
+- `%LOCALAPPDATA%\DiskHistory\logs`
+- `%LOCALAPPDATA%\DiskHistory\exports`
+- `%LOCALAPPDATA%\DiskHistory\focus_logs`
+- `%LOCALAPPDATA%\DiskHistory\disk_history.sqlite3`
+
+原因是工程安全，而不是隐私偏好：如果工具监控自己写出的日志和数据库，就可能出现“写日志 -> 记录日志变化 -> 再写日志”的循环。
+
+重点监控日志可能包含完整路径信息。它们适合复制给 AI 或人工分析，但不应提交到公开仓库。
+
 Disk History 是个人本地工具，也计划未来开源。因此安全设计的重点是：默认不收集过多信息，不上传数据，不误提交隐私文件。
 
 它是磁盘空间变化调查工具，不是清理工具。

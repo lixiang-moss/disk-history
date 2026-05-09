@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from string import ascii_uppercase
 
 
 APP_NAME = "DiskHistory"
@@ -40,28 +41,112 @@ class MonitorRule:
         )
 
 
+@dataclass(frozen=True)
+class NoiseRule:
+    name: str
+    path_template: str
+    enabled: bool = True
+
+    def resolved_path(self) -> Path:
+        return expand_path_template(self.path_template)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "path_template": self.path_template,
+            "enabled": self.enabled,
+        }
+
+    @classmethod
+    def from_dict(cls, value: dict[str, object]) -> "NoiseRule":
+        return cls(
+            name=str(value["name"]),
+            path_template=str(value["path_template"]),
+            enabled=bool(value.get("enabled", True)),
+        )
+
+
+@dataclass(frozen=True)
+class FocusTargetConfig:
+    name: str
+    path_template: str
+    enabled: bool = True
+    max_depth: int = 8
+    snapshot_interval_minutes: int = 1
+    ttl_hours: int = 24
+
+    def resolved_path(self) -> Path:
+        return expand_path_template(self.path_template)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "path_template": self.path_template,
+            "enabled": self.enabled,
+            "max_depth": self.max_depth,
+            "snapshot_interval_minutes": self.snapshot_interval_minutes,
+            "ttl_hours": self.ttl_hours,
+        }
+
+    @classmethod
+    def from_dict(cls, value: dict[str, object]) -> "FocusTargetConfig":
+        return cls(
+            name=str(value["name"]),
+            path_template=str(value["path_template"]),
+            enabled=bool(value.get("enabled", True)),
+            max_depth=max(1, int(value.get("max_depth", 8))),
+            snapshot_interval_minutes=max(1, int(value.get("snapshot_interval_minutes", 1))),
+            ttl_hours=max(1, int(value.get("ttl_hours", 24))),
+        )
+
+
 DEFAULT_MONITOR_RULES: tuple[MonitorRule, ...] = (
-    MonitorRule("Downloads", r"{USERPROFILE}\Downloads", "detailed"),
-    MonitorRule("Temp", r"{LOCALAPPDATA}\Temp", "detailed"),
-    MonitorRule("Local Programs", r"{LOCALAPPDATA}\Programs", "detailed"),
-    MonitorRule("VS Code Extensions", r"{USERPROFILE}\.vscode\extensions", "detailed"),
-    MonitorRule("Package Cache", r"{PROGRAMDATA}\Package Cache", "detailed"),
-    MonitorRule("Windows Update Download", r"{SYSTEMROOT}\SoftwareDistribution\Download", "summary"),
-    MonitorRule("Documents", r"{USERPROFILE}\Documents", "summary"),
-    MonitorRule("Desktop", r"{USERPROFILE}\Desktop", "summary"),
-    MonitorRule("Pictures", r"{USERPROFILE}\Pictures", "summary"),
-    MonitorRule("Videos", r"{USERPROFILE}\Videos", "summary"),
-    MonitorRule("OneDrive", r"{USERPROFILE}\OneDrive", "summary"),
+    MonitorRule("C Drive", "C:\\", "detailed"),
+    MonitorRule("D Drive", "D:\\", "detailed"),
 )
 
 
 DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
     "*.tmp",
     "*.lock",
-    "*.log",
-    "*/Cache/*",
-    "*/Code Cache/*",
-    "*/GPUCache/*",
+)
+
+
+DEFAULT_NOISE_RULES: tuple[NoiseRule, ...] = (
+    NoiseRule("User Temp", r"{LOCALAPPDATA}\Temp"),
+    NoiseRule("Windows Temp", r"{SYSTEMROOT}\Temp"),
+    NoiseRule("Browser Cache", r"Cache"),
+    NoiseRule("Code Cache", r"Code Cache"),
+    NoiseRule("GPU Cache", r"GPUCache"),
+    NoiseRule("Git Metadata", r".git"),
+    NoiseRule("Node Modules", r"node_modules"),
+    NoiseRule("Python Virtual Env", r".venv"),
+    NoiseRule("Python Cache", r"__pycache__"),
+    NoiseRule("Build Output", r"build"),
+    NoiseRule("Dist Output", r"dist"),
+    NoiseRule("Rust Target", r"target"),
+    NoiseRule("Windows Update Download", r"{SYSTEMROOT}\SoftwareDistribution\Download"),
+    NoiseRule("Package Cache", r"{PROGRAMDATA}\Package Cache"),
+)
+
+
+DEFAULT_EXCLUDED_PATHS: tuple[str, ...] = (
+    r"{LOCALAPPDATA}\DiskHistory\logs",
+    r"{LOCALAPPDATA}\DiskHistory\exports",
+    r"{LOCALAPPDATA}\DiskHistory\focus_logs",
+    r"{LOCALAPPDATA}\DiskHistory\disk_history.sqlite3",
+    r"C:\System Volume Information",
+    r"C:\$Extend",
+    r"C:\$LogFile",
+    r"C:\$MFT",
+    r"C:\$Secure",
+    r"C:\$Boot",
+    r"C:\$BadClus",
+    r"C:\$Bitmap",
+    r"C:\$UpCase",
+    r"C:\pagefile.sys",
+    r"C:\hiberfil.sys",
+    r"C:\swapfile.sys",
 )
 
 
@@ -99,3 +184,15 @@ def ensure_data_dir() -> Path:
     path = app_data_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def existing_fixed_drives(preferred: tuple[str, ...] = ("C:", "D:")) -> tuple[str, ...]:
+    drives: list[str] = []
+    candidates = list(preferred) + [f"{letter}:" for letter in ascii_uppercase]
+    for drive in candidates:
+        normalized = drive.upper().rstrip("\\/")
+        if normalized in drives:
+            continue
+        if Path(normalized + "\\").exists():
+            drives.append(normalized)
+    return tuple(drives)

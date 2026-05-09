@@ -1,5 +1,6 @@
 from disk_history.config import MonitorRule
-from disk_history.watcher import DiskHistoryWatcher, watch_targets
+from disk_history.privacy import PrivacyPolicy
+from disk_history.watcher import DiskHistoryEventHandler, DiskHistoryWatcher, watch_targets
 from disk_history.database import DiskHistoryDatabase
 
 
@@ -28,6 +29,36 @@ def test_watch_targets_skip_excluded_log_directory(tmp_path):
     targets = watch_targets(rules, excluded_roots=(logs,))
 
     assert targets == []
+
+
+def test_watch_targets_skip_noise_directory(tmp_path):
+    noise = tmp_path / "node_modules"
+    noise.mkdir()
+    rules = (MonitorRule("Noise", str(noise), "detailed", enabled=True),)
+
+    targets = watch_targets(rules, noise_roots=(noise,))
+
+    assert targets == []
+
+
+def test_event_handler_ignores_relative_noise_directory(tmp_path):
+    watched = tmp_path / "watched"
+    noise = watched / ".git"
+    noise.mkdir(parents=True)
+    (noise / "index").write_bytes(b"abc")
+    db = DiskHistoryDatabase(tmp_path / "events.sqlite3")
+    db.initialize()
+    rules = (MonitorRule("Watched", str(watched), "detailed"),)
+    handler = DiskHistoryEventHandler(
+        db,
+        PrivacyPolicy(rules, ignore_patterns=()),
+        noise_names=(".git",),
+    )
+
+    handler._record_path("modified", noise / "index", False)
+
+    assert db.recent_events() == []
+    db.close()
 
 
 def test_disk_history_watcher_start_stop(tmp_path):

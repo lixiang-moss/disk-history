@@ -1,4 +1,14 @@
-from disk_history.scanner import child_size_rankings, directory_size, format_bytes
+from disk_history.config import MonitorRule, NoiseRule
+from disk_history.scanner import (
+    TreeRoot,
+    capture_focus_snapshots,
+    capture_noise_snapshots,
+    capture_tree_snapshots,
+    child_size_rankings,
+    directory_size,
+    format_bytes,
+    tree_roots_from_monitor_rules,
+)
 
 
 def test_directory_size_counts_files(tmp_path):
@@ -45,3 +55,63 @@ def test_child_size_rankings_orders_immediate_children(tmp_path):
 def test_format_bytes():
     assert format_bytes(1024) == "1.0 KB"
     assert format_bytes(None) == "unknown"
+
+
+def test_capture_tree_snapshots_respects_depth(tmp_path):
+    level1 = tmp_path / "level1"
+    level2 = level1 / "level2"
+    level2.mkdir(parents=True)
+    (level2 / "file.bin").write_bytes(b"abc")
+
+    snapshots = capture_tree_snapshots(
+        (TreeRoot("Root", tmp_path, "", "standard"),),
+        max_depth=1,
+    )
+
+    assert {snapshot.relative_path for snapshot in snapshots} == {".", "level1"}
+
+
+def test_tree_roots_skip_excluded_disk_history_data(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+
+    roots = tree_roots_from_monitor_rules(
+        (MonitorRule("Logs", str(logs), "detailed"),),
+        excluded_roots=(logs,),
+    )
+
+    assert roots == ()
+
+
+def test_noise_snapshot_uses_snapshot_only_strategy(tmp_path):
+    noise = tmp_path / "node_modules"
+    noise.mkdir()
+    (noise / "package.bin").write_bytes(b"abc")
+
+    snapshots = capture_noise_snapshots((NoiseRule("Node Modules", str(noise)),))
+
+    assert len(snapshots) == 1
+    assert snapshots[0].strategy == "noise_snapshot_only"
+    assert snapshots[0].size_bytes == 3
+
+
+def test_focus_snapshots_use_deeper_depth(tmp_path):
+    root = tmp_path / "focus"
+    deep = root / "a" / "b"
+    deep.mkdir(parents=True)
+    (deep / "file.bin").write_bytes(b"abc")
+
+    snapshots = capture_focus_snapshots(
+        (
+            {
+                "id": "case-1",
+                "name": "Case",
+                "path_template": str(root),
+                "enabled": True,
+                "max_depth": 2,
+            },
+        ),
+        max_depth=8,
+    )
+
+    assert {snapshot.relative_path for snapshot in snapshots} == {".", "a", r"a\b"}

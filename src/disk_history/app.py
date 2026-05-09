@@ -49,14 +49,31 @@ from disk_history.analytics import (
     timeline_by_hour,
 )
 from disk_history.activity_log import activity_log_writer, detect_growth_alert
-from disk_history.config import MonitorRule, app_data_dir, database_path
+from disk_history.background import focus_roots_from_settings
+from disk_history.config import MonitorRule, NoiseRule, app_data_dir, database_path
 from disk_history.database import DiskHistoryDatabase
 from disk_history.i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 from disk_history.notifications import TrayNotifier
 from disk_history.privacy import DETAILED, IGNORE, SUMMARY
 from disk_history.reports import build_investigation_report, default_report_path, write_report
-from disk_history.scanner import capture_snapshots, child_size_rankings, format_bytes
-from disk_history.settings import load_settings, resolved_log_directory, save_settings, settings_path
+from disk_history.scanner import (
+    capture_drive_snapshots,
+    capture_focus_snapshots,
+    capture_noise_snapshots,
+    capture_snapshots,
+    capture_tree_snapshots,
+    child_size_rankings,
+    default_excluded_roots,
+    format_bytes,
+    tree_roots_from_monitor_rules,
+)
+from disk_history.settings import (
+    load_settings,
+    resolved_focus_log_directory,
+    resolved_log_directory,
+    save_settings,
+    settings_path,
+)
 from disk_history.startup import (
     disable_start_on_login,
     enable_start_on_login,
@@ -91,8 +108,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(self.t("app.title"))
         self.tabs = QTabWidget()
         self.tabs.addTab(self._overview_tab(), self.t("tab.overview"))
+        self.tabs.addTab(self._drives_tab(), self.t("tab.drives"))
+        self.tabs.addTab(self._tree_tab(), self.t("tab.tree"))
         self.tabs.addTab(self._timeline_tab(), self.t("tab.timeline"))
         self.tabs.addTab(self._investigation_tab(), self.t("tab.investigation"))
+        self.tabs.addTab(self._noise_tab(), self.t("tab.noise"))
+        self.tabs.addTab(self._focus_tab(), self.t("tab.focus"))
         self.tabs.addTab(self._sources_tab(), self.t("tab.sources"))
         self.tabs.addTab(self._heatmap_tab(), self.t("tab.heatmap"))
         self.tabs.addTab(self._settings_tab(), self.t("tab.settings"))
@@ -142,6 +163,40 @@ class MainWindow(QMainWindow):
             ]
         )
         layout.addWidget(self.snapshot_table)
+        return widget
+
+    def _drives_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        self.drive_table = QTableWidget(0, 5)
+        self.drive_table.setHorizontalHeaderLabels(
+            [
+                self.t("table.drive"),
+                self.t("table.total_size"),
+                self.t("table.used_size"),
+                self.t("table.free_size"),
+                self.t("table.time"),
+            ]
+        )
+        layout.addWidget(self.drive_table)
+        return widget
+
+    def _tree_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        self.tree_table = QTableWidget(0, 7)
+        self.tree_table.setHorizontalHeaderLabels(
+            [
+                self.t("table.drive"),
+                self.t("table.path"),
+                self.t("table.depth"),
+                self.t("table.size"),
+                self.t("table.files"),
+                self.t("table.strategy"),
+                self.t("table.time"),
+            ]
+        )
+        layout.addWidget(self.tree_table)
         return widget
 
     def _timeline_tab(self) -> QWidget:
@@ -271,6 +326,56 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.sources_chart)
         return widget
 
+    def _noise_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(QLabel(self.t("label.noise_rules_intro")))
+        self.noise_table = QTableWidget(0, 3)
+        self.noise_table.setHorizontalHeaderLabels(
+            [
+                self.t("table.enabled"),
+                self.t("table.name"),
+                self.t("table.path_template"),
+            ]
+        )
+        self._populate_noise_table(self.settings.noise_rules)
+        layout.addWidget(self.noise_table)
+        return widget
+
+    def _focus_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(QLabel(self.t("label.focus_targets_intro")))
+        self.focus_table = QTableWidget(0, 5)
+        self.focus_table.setHorizontalHeaderLabels(
+            [
+                self.t("table.enabled"),
+                self.t("table.name"),
+                self.t("table.path_template"),
+                self.t("table.depth"),
+                self.t("table.ttl_hours"),
+            ]
+        )
+        self._populate_focus_table(self.settings.focus_targets)
+        layout.addWidget(self.focus_table)
+
+        focus_actions = QHBoxLayout()
+        self.add_focus_button = QPushButton(self.t("button.add_focus"))
+        self.add_focus_button.clicked.connect(self.add_focus_target)
+        self.remove_focus_button = QPushButton(self.t("button.remove_focus"))
+        self.remove_focus_button.clicked.connect(self.remove_selected_focus_target)
+        self.browse_focus_button = QPushButton(self.t("button.choose_focus_directory"))
+        self.browse_focus_button.clicked.connect(self.choose_focus_directory)
+        focus_actions.addWidget(self.add_focus_button)
+        focus_actions.addWidget(self.remove_focus_button)
+        focus_actions.addWidget(self.browse_focus_button)
+        focus_actions.addStretch(1)
+        layout.addLayout(focus_actions)
+
+        self.focus_log_label = QLabel(self.t("label.focus_log_directory", path=resolved_focus_log_directory()))
+        layout.addWidget(self.focus_log_label)
+        return widget
+
     def _heatmap_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -397,6 +502,26 @@ class MainWindow(QMainWindow):
         self.settings = load_settings()
         snapshots = capture_snapshots(self.settings.monitor_rules, self._excluded_roots())
         self.database.insert_snapshots(snapshots)
+        if self.settings.drive_monitoring_enabled:
+            self.database.insert_drive_snapshots(capture_drive_snapshots(self.settings.monitored_drives))
+        tree_roots = tree_roots_from_monitor_rules(self.settings.monitor_rules, self._excluded_roots())
+        self.database.insert_tree_snapshots(
+            capture_tree_snapshots(
+                tree_roots,
+                max_depth=self.settings.standard_tree_depth,
+                excluded_roots=self._excluded_roots(),
+            )
+        )
+        self.database.insert_tree_snapshots(
+            capture_noise_snapshots(self.settings.noise_rules, excluded_roots=self._excluded_roots())
+        )
+        self.database.insert_focus_snapshots(
+            capture_focus_snapshots(
+                self.settings.focus_targets,
+                max_depth=self.settings.focus_tree_depth,
+                excluded_roots=self._excluded_roots(),
+            )
+        )
         self._write_activity_logs_and_alert(snapshots)
         self.refresh_all()
 
@@ -411,6 +536,8 @@ class MainWindow(QMainWindow):
             self.settings.monitor_rules,
             self.settings.ignore_patterns,
             self._excluded_roots(),
+            self.settings.noise_rules,
+            focus_roots_from_settings(self.settings),
         )
         try:
             self.watcher.start()
@@ -462,6 +589,8 @@ class MainWindow(QMainWindow):
             self.stop_monitor_button.setEnabled(False)
 
         self._refresh_snapshots(snapshots)
+        self._refresh_drives(self.database.latest_drive_snapshots())
+        self._refresh_tree(self.database.latest_tree_snapshots())
         self._refresh_events(events)
         self._refresh_investigation(snapshot_history)
         self._refresh_directory_chart(snapshots)
@@ -486,6 +615,46 @@ class MainWindow(QMainWindow):
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.snapshot_table.setItem(row_index, column, item)
         self.snapshot_table.resizeColumnsToContents()
+
+    def _refresh_drives(self, rows) -> None:
+        if not hasattr(self, "drive_table"):
+            return
+        self.drive_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            values = [
+                row["drive"],
+                format_bytes(row["total_bytes"]),
+                format_bytes(row["used_bytes"]),
+                format_bytes(row["free_bytes"]),
+                row["captured_at"],
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column in {1, 2, 3}:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.drive_table.setItem(row_index, column, item)
+        self.drive_table.resizeColumnsToContents()
+
+    def _refresh_tree(self, rows) -> None:
+        if not hasattr(self, "tree_table"):
+            return
+        self.tree_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            values = [
+                row["drive"],
+                row["path"],
+                str(row["depth"]),
+                format_bytes(row["size_bytes"]),
+                str(row["file_count"]),
+                row["strategy"],
+                row["captured_at"],
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column in {2, 3, 4}:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.tree_table.setItem(row_index, column, item)
+        self.tree_table.resizeColumnsToContents()
 
     def _refresh_events(self, rows) -> None:
         self.event_table.setRowCount(len(rows))
@@ -809,13 +978,41 @@ class MainWindow(QMainWindow):
         self.disable_startup_button.setEnabled(enabled)
 
     def _excluded_roots(self):
-        return (resolved_log_directory(self.settings),)
+        return default_excluded_roots(
+            (resolved_log_directory(self.settings), resolved_focus_log_directory())
+        )
 
     def _populate_rule_table(self, rules: tuple[MonitorRule, ...]) -> None:
         self.rule_table.setRowCount(0)
         for rule in rules:
             self._append_rule_row(rule)
         self.rule_table.resizeColumnsToContents()
+
+    def _populate_noise_table(self, rules: tuple[NoiseRule, ...]) -> None:
+        self.noise_table.setRowCount(0)
+        for rule in rules:
+            row = self.noise_table.rowCount()
+            self.noise_table.insertRow(row)
+            self.noise_table.setItem(row, 0, _check_item(rule.enabled))
+            self.noise_table.setItem(row, 1, QTableWidgetItem(rule.name))
+            self.noise_table.setItem(row, 2, QTableWidgetItem(rule.path_template))
+        self.noise_table.resizeColumnsToContents()
+
+    def _populate_focus_table(self, targets: tuple[dict[str, object], ...]) -> None:
+        self.focus_table.setRowCount(0)
+        for target in targets:
+            row = self.focus_table.rowCount()
+            self.focus_table.insertRow(row)
+            self.focus_table.setItem(row, 0, _check_item(bool(target.get("enabled", True))))
+            self.focus_table.setItem(row, 1, QTableWidgetItem(str(target.get("name", ""))))
+            self.focus_table.setItem(
+                row,
+                2,
+                QTableWidgetItem(str(target.get("path_template", target.get("path", "")))),
+            )
+            self.focus_table.setItem(row, 3, QTableWidgetItem(str(target.get("max_depth", 8))))
+            self.focus_table.setItem(row, 4, QTableWidgetItem(str(target.get("ttl_hours", 24))))
+        self.focus_table.resizeColumnsToContents()
 
     def _append_rule_row(self, rule: MonitorRule) -> None:
         row = self.rule_table.rowCount()
@@ -854,6 +1051,23 @@ class MainWindow(QMainWindow):
             return
         self.rule_table.removeRow(row)
 
+    def add_focus_target(self) -> None:
+        row = self.focus_table.rowCount()
+        self.focus_table.insertRow(row)
+        self.focus_table.setItem(row, 0, _check_item(True))
+        self.focus_table.setItem(row, 1, QTableWidgetItem(self.t("default.focus_target_name")))
+        self.focus_table.setItem(row, 2, QTableWidgetItem(""))
+        self.focus_table.setItem(row, 3, QTableWidgetItem(str(self.settings.focus_tree_depth)))
+        self.focus_table.setItem(row, 4, QTableWidgetItem(str(self.settings.focus_default_ttl_hours)))
+        self.focus_table.setCurrentCell(row, 2)
+
+    def remove_selected_focus_target(self) -> None:
+        row = self.focus_table.currentRow()
+        if row < 0:
+            self.settings_status_label.setText(self.t("label.focus_select_first"))
+            return
+        self.focus_table.removeRow(row)
+
     def choose_monitor_rule_directory(self) -> None:
         row = self.rule_table.currentRow()
         if row < 0:
@@ -868,6 +1082,21 @@ class MainWindow(QMainWindow):
         )
         if selected:
             self.rule_table.setItem(row, 4, QTableWidgetItem(selected))
+
+    def choose_focus_directory(self) -> None:
+        row = self.focus_table.currentRow()
+        if row < 0:
+            self.settings_status_label.setText(self.t("label.focus_select_first"))
+            return
+        path_item = self.focus_table.item(row, 2)
+        current = path_item.text() if path_item else ""
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            self.t("dialog.choose_focus_directory"),
+            current,
+        )
+        if selected:
+            self.focus_table.setItem(row, 2, QTableWidgetItem(selected))
 
     def choose_log_directory(self) -> None:
         current = str(resolved_log_directory(self.settings))
@@ -887,6 +1116,12 @@ class MainWindow(QMainWindow):
         monitor_rules = self._monitor_rules_from_table()
         if monitor_rules is None:
             return
+        noise_rules = self._noise_rules_from_table()
+        if noise_rules is None:
+            return
+        focus_targets = self._focus_targets_from_table()
+        if focus_targets is None:
+            return
 
         was_monitoring = self.watcher is not None and self.watcher.is_running
         if was_monitoring:
@@ -895,6 +1130,8 @@ class MainWindow(QMainWindow):
         self.settings = replace(
             self.settings,
             monitor_rules=monitor_rules,
+            noise_rules=noise_rules,
+            focus_targets=focus_targets,
             background_snapshot_interval_minutes=self.background_interval_spin.value(),
             log_directory=log_directory,
             enable_growth_alerts=self.enable_growth_alerts_check.isChecked(),
@@ -907,6 +1144,7 @@ class MainWindow(QMainWindow):
             self.t("label.log_directory_resolved", path=resolved_log_directory(self.settings))
         )
         self._populate_drilldown_rules()
+        self.focus_log_label.setText(self.t("label.focus_log_directory", path=resolved_focus_log_directory()))
 
         if was_monitoring:
             self.start_monitoring()
@@ -940,6 +1178,50 @@ class MainWindow(QMainWindow):
                 )
             )
         return tuple(rules)
+
+    def _noise_rules_from_table(self) -> tuple[NoiseRule, ...] | None:
+        rules: list[NoiseRule] = []
+        for row in range(self.noise_table.rowCount()):
+            name_item = self.noise_table.item(row, 1)
+            path_item = self.noise_table.item(row, 2)
+            name = name_item.text().strip() if name_item else ""
+            path_template = path_item.text().strip() if path_item else ""
+            if not name or not path_template:
+                self.settings_status_label.setText(self.t("label.noise_rule_error", row=row + 1))
+                return None
+            rules.append(
+                NoiseRule(
+                    name=name,
+                    path_template=path_template,
+                    enabled=_item_checked(self.noise_table.item(row, 0)),
+                )
+            )
+        return tuple(rules)
+
+    def _focus_targets_from_table(self) -> tuple[dict[str, object], ...] | None:
+        targets: list[dict[str, object]] = []
+        for row in range(self.focus_table.rowCount()):
+            name_item = self.focus_table.item(row, 1)
+            path_item = self.focus_table.item(row, 2)
+            depth_item = self.focus_table.item(row, 3)
+            ttl_item = self.focus_table.item(row, 4)
+            name = name_item.text().strip() if name_item else ""
+            path_template = path_item.text().strip() if path_item else ""
+            if not name or not path_template:
+                self.settings_status_label.setText(self.t("label.focus_rule_error", row=row + 1))
+                return None
+            targets.append(
+                {
+                    "id": f"focus-{row + 1}",
+                    "name": name,
+                    "path_template": path_template,
+                    "enabled": _item_checked(self.focus_table.item(row, 0)),
+                    "max_depth": _positive_int_item(depth_item, self.settings.focus_tree_depth),
+                    "snapshot_interval_minutes": self.settings.focus_snapshot_interval_minutes,
+                    "ttl_hours": _positive_int_item(ttl_item, self.settings.focus_default_ttl_hours),
+                }
+            )
+        return tuple(targets)
 
     def _write_activity_logs_and_alert(self, snapshots) -> None:
         writer = activity_log_writer(self.settings)
@@ -1007,6 +1289,15 @@ def _check_item(checked: bool) -> QTableWidgetItem:
 
 def _item_checked(item: QTableWidgetItem | None) -> bool:
     return item is not None and item.checkState() == Qt.Checked
+
+
+def _positive_int_item(item: QTableWidgetItem | None, fallback: int) -> int:
+    if item is None:
+        return fallback
+    try:
+        return max(1, int(item.text().strip()))
+    except ValueError:
+        return fallback
 
 
 def _qdatetime_to_utc(value: QDateTime) -> datetime:

@@ -257,6 +257,68 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
 }
 
+TRANSLATIONS["zh-CN"].update(
+    {
+        "tab.drives": "磁盘",
+        "tab.tree": "目录树",
+        "tab.noise": "噪音目录",
+        "tab.focus": "重点监控",
+        "button.add_focus": "添加重点监控",
+        "button.remove_focus": "删除选中重点监控",
+        "button.choose_focus_directory": "选择重点目录...",
+        "label.noise_rules_intro": (
+            "噪音目录不做实时文件事件记录，只做短间隔大小快照，避免高频小变化淹没真正的增长线索。"
+        ),
+        "label.focus_targets_intro": (
+            "重点监控名单用于临时深入调查可疑目录：实时监听、深层快照，并生成独立日志。"
+        ),
+        "label.focus_log_directory": "重点监控日志目录：{path}",
+        "label.focus_select_first": "请先选中一个重点监控目标。",
+        "label.noise_rule_error": "第 {row} 条噪音目录规则需要名称和路径。",
+        "label.focus_rule_error": "第 {row} 条重点监控规则需要名称和路径。",
+        "table.drive": "盘符",
+        "table.total_size": "总容量",
+        "table.used_size": "已用",
+        "table.free_size": "可用",
+        "table.depth": "深度",
+        "table.strategy": "策略",
+        "table.ttl_hours": "有效期小时",
+        "default.focus_target_name": "可疑目录",
+        "dialog.choose_focus_directory": "选择重点监控目录",
+    }
+)
+
+TRANSLATIONS["en"].update(
+    {
+        "tab.drives": "Drives",
+        "tab.tree": "Directory Tree",
+        "tab.noise": "Noise Folders",
+        "tab.focus": "Focus Monitoring",
+        "button.add_focus": "Add Focus Target",
+        "button.remove_focus": "Remove Selected Focus",
+        "button.choose_focus_directory": "Choose Focus Folder...",
+        "label.noise_rules_intro": (
+            "Noise folders skip realtime file events and use short-interval size snapshots."
+        ),
+        "label.focus_targets_intro": (
+            "Focus targets are temporary deep investigations with realtime events, deeper snapshots, and independent logs."
+        ),
+        "label.focus_log_directory": "Focus log directory: {path}",
+        "label.focus_select_first": "Select a focus target first.",
+        "label.noise_rule_error": "Noise rule {row} needs a name and path.",
+        "label.focus_rule_error": "Focus rule {row} needs a name and path.",
+        "table.drive": "Drive",
+        "table.total_size": "Total",
+        "table.used_size": "Used",
+        "table.free_size": "Free",
+        "table.depth": "Depth",
+        "table.strategy": "Strategy",
+        "table.ttl_hours": "TTL Hours",
+        "default.focus_target_name": "Suspicious Folder",
+        "dialog.choose_focus_directory": "Choose Focus Folder",
+    }
+)
+
 
 def normalize_language(language: str | None) -> str:
     if language in SUPPORTED_LANGUAGES:

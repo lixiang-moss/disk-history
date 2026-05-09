@@ -5,9 +5,24 @@ from datetime import timedelta
 
 from disk_history.activity_log import activity_log_writer, detect_growth_alert
 from disk_history.config import database_path
+from disk_history.background import focus_roots_from_settings
 from disk_history.database import DiskHistoryDatabase
-from disk_history.scanner import capture_snapshots, format_bytes
-from disk_history.settings import load_settings, resolved_log_directory, settings_path
+from disk_history.scanner import (
+    capture_drive_snapshots,
+    capture_focus_snapshots,
+    capture_noise_snapshots,
+    capture_snapshots,
+    capture_tree_snapshots,
+    default_excluded_roots,
+    format_bytes,
+    tree_roots_from_monitor_rules,
+)
+from disk_history.settings import (
+    load_settings,
+    resolved_focus_log_directory,
+    resolved_log_directory,
+    settings_path,
+)
 from disk_history.watcher import run_watcher
 
 
@@ -45,9 +60,28 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "scan":
         settings = load_settings()
-        excluded_roots = (resolved_log_directory(settings),)
+        excluded_roots = default_excluded_roots(
+            (resolved_log_directory(settings), resolved_focus_log_directory())
+        )
         snapshots = capture_snapshots(settings.monitor_rules, excluded_roots)
         db.insert_snapshots(snapshots)
+        if settings.drive_monitoring_enabled:
+            db.insert_drive_snapshots(capture_drive_snapshots(settings.monitored_drives))
+        db.insert_tree_snapshots(
+            capture_tree_snapshots(
+                tree_roots_from_monitor_rules(settings.monitor_rules, excluded_roots),
+                max_depth=settings.standard_tree_depth,
+                excluded_roots=excluded_roots,
+            )
+        )
+        db.insert_tree_snapshots(capture_noise_snapshots(settings.noise_rules, excluded_roots=excluded_roots))
+        db.insert_focus_snapshots(
+            capture_focus_snapshots(
+                settings.focus_targets,
+                max_depth=settings.focus_tree_depth,
+                excluded_roots=excluded_roots,
+            )
+        )
         writer = activity_log_writer(settings)
         writer.append_snapshots(snapshots)
         if snapshots:
@@ -80,11 +114,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "watch":
         settings = load_settings()
+        excluded_roots = default_excluded_roots(
+            (resolved_log_directory(settings), resolved_focus_log_directory())
+        )
         run_watcher(
             db,
             settings.monitor_rules,
             settings.ignore_patterns,
-            (resolved_log_directory(settings),),
+            excluded_roots,
+            settings.noise_rules,
+            focus_roots_from_settings(settings),
         )
         return 0
 

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from threading import Thread
 
-from disk_history.database import DiskHistoryDatabase, FileEvent
+from disk_history.database import DiskHistoryDatabase, DriveSnapshot, FileEvent, FocusSnapshot, TreeSnapshot
 
 
 def test_database_inserts_and_reads_event(tmp_path):
@@ -80,4 +80,80 @@ def test_database_filters_events_between_times(tmp_path):
 
     assert len(rows) == 1
     assert rows[0]["category"] == "Late"
+    db.close()
+
+
+def test_database_stores_drive_tree_and_focus_snapshots(tmp_path):
+    db = DiskHistoryDatabase(tmp_path / "snapshots.sqlite3")
+    db.initialize()
+    captured_at = datetime(2026, 5, 6, tzinfo=UTC)
+
+    db.insert_drive_snapshots((DriveSnapshot(captured_at, "C:", 100, 40, 60),))
+    db.insert_tree_snapshots(
+        (
+            TreeSnapshot(
+                captured_at=captured_at,
+                drive="C:",
+                path=r"C:\Project",
+                relative_path="Project",
+                depth=1,
+                size_bytes=10,
+                file_count=1,
+                error_count=0,
+                strategy="standard",
+            ),
+        )
+    )
+    db.insert_focus_snapshots(
+        (
+            FocusSnapshot(
+                captured_at=captured_at,
+                target_id="focus-1",
+                target_name="Focus",
+                path=r"C:\Project",
+                relative_path=".",
+                depth=0,
+                size_bytes=10,
+                file_count=1,
+                error_count=0,
+            ),
+        )
+    )
+
+    assert db.latest_drive_snapshots()[0]["used_bytes"] == 40
+    assert db.latest_tree_snapshots()[0]["strategy"] == "standard"
+    db.close()
+
+
+def test_database_filters_events_by_source_strategy(tmp_path):
+    db = DiskHistoryDatabase(tmp_path / "strategy.sqlite3")
+    db.initialize()
+    happened_at = datetime(2026, 5, 6, tzinfo=UTC)
+    db.insert_event(
+        FileEvent(
+            happened_at=happened_at,
+            event_type="created",
+            privacy_mode="detailed",
+            category="standard",
+            display_path="standard",
+            path="standard",
+            source_strategy="standard",
+        )
+    )
+    db.insert_event(
+        FileEvent(
+            happened_at=happened_at,
+            event_type="created",
+            privacy_mode="detailed",
+            category="focus",
+            display_path="focus",
+            path="focus",
+            source_strategy="focus",
+        )
+    )
+
+    rows = db.events_between(happened_at, happened_at, source_strategy="focus")
+
+    assert len(rows) == 1
+    assert rows[0]["category"] == "focus"
     db.close()

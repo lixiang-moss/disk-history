@@ -62,6 +62,39 @@ def test_gui_saves_monitor_rule_edits(monkeypatch, tmp_path):
     app.processEvents()
 
 
+def test_gui_saves_noise_and_focus_rules(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    window.noise_table.setRowCount(0)
+    window.noise_table.insertRow(0)
+    window.noise_table.setItem(0, 0, window.rule_table.item(0, 0).clone())
+    window.noise_table.setItem(0, 1, window.rule_table.item(0, 1).clone())
+    window.noise_table.item(0, 1).setText("Build")
+    window.noise_table.setItem(0, 2, window.rule_table.item(0, 4).clone())
+    window.noise_table.item(0, 2).setText("build")
+
+    focus = tmp_path / "focus"
+    focus.mkdir()
+    window.focus_table.setRowCount(0)
+    window.add_focus_target()
+    window.focus_table.item(0, 1).setText("Focus")
+    window.focus_table.item(0, 2).setText(str(focus))
+    window.save_runtime_settings()
+
+    settings = load_settings(create_if_missing=False)
+
+    assert settings.noise_rules[0].name == "Build"
+    assert settings.noise_rules[0].path_template == "build"
+    assert settings.focus_targets[0]["name"] == "Focus"
+    assert settings.focus_targets[0]["path_template"] == str(focus)
+
+    window.close()
+    app.processEvents()
+
+
 def test_gui_rejects_monitor_rule_without_path(monkeypatch, tmp_path):
     monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path))
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
