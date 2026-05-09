@@ -38,6 +38,32 @@
   -> focus_log.py 独立日志
 ```
 
+## 后期架构备忘：自适应策略引擎
+
+后期如果实现自适应噪音目录识别，可以新增一个独立模块，例如 `adaptive_policy.py`。它不应直接写文件事件，也不应直接修改监听器状态，而是读取 `file_events`、`tree_snapshots` 和 `growth_alerts`，生成“策略建议”。
+
+建议的数据流：
+
+```text
+file_events + tree_snapshots + growth_alerts
+  -> adaptive_policy.py 计算目录稳定性指标
+  -> adaptive_policy_suggestions 表
+  -> GUI 展示建议和解释
+  -> 用户确认后写入 noise_rules 或动态扫描配置
+```
+
+建议指标：
+
+- `event_count`：观察窗口内事件数量。
+- `snapshot_count`：观察窗口内快照数量。
+- `net_growth_bytes`：窗口起点到终点的净增长。
+- `absolute_churn_bytes`：所有相邻快照变化量的绝对值之和。
+- `peak_to_peak_bytes`：窗口内最大占用和最小占用的差。
+- `max_single_growth_bytes`：相邻两次快照之间的最大正增长。
+- `stability_ratio`：`abs(net_growth_bytes) / max(absolute_churn_bytes, 1)`。
+
+基本判定可以是：事件数量超过阈值，但净增长、峰谷差、最大单次增长都低于阈值，并且最近没有增长提醒，则认为它是“高频低增长候选”。候选目录需要经过冷却期，避免一次短期平稳就被降级。
+
 Disk History 被拆分成多个小模块，方便新手理解每一部分的职责。
 
 ## 主流程
