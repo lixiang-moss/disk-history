@@ -29,8 +29,17 @@ def is_start_on_login_enabled() -> bool:
 
 
 def startup_command(python_executable: str | None = None) -> tuple[str, str]:
-    executable = python_executable or sys.executable
+    executable = background_python_executable(python_executable or sys.executable)
     return executable, "-m disk_history background"
+
+
+def background_python_executable(python_executable: str) -> str:
+    executable = Path(python_executable)
+    if os.name == "nt" and executable.name.lower() == "python.exe":
+        windowless_executable = executable.with_name("pythonw.exe")
+        if windowless_executable.exists():
+            return str(windowless_executable)
+    return python_executable
 
 
 def enable_start_on_login(
@@ -70,4 +79,3 @@ def disable_start_on_login() -> None:
 
 def _ps_escape(value: str) -> str:
     return value.replace("'", "''")
-

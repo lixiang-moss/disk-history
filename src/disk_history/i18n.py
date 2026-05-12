@@ -383,6 +383,28 @@ TRANSLATIONS["en"].update(
     }
 )
 
+TRANSLATIONS["zh-CN"].update(
+    {
+        "label.startup_mode": "记录程序启动方式",
+        "label.startup_mode_help": (
+            "选择“随 Windows 登录自动后台记录”会创建当前用户启动项；选择“手动打开记录程序”会移除该启动项。"
+        ),
+        "startup_mode.auto": "随 Windows 登录自动后台记录",
+        "startup_mode.manual": "手动打开记录程序",
+    }
+)
+
+TRANSLATIONS["en"].update(
+    {
+        "label.startup_mode": "Recorder startup mode",
+        "label.startup_mode_help": (
+            "Auto mode creates a startup shortcut for the current user. Manual mode removes that shortcut."
+        ),
+        "startup_mode.auto": "Start background recording when Windows signs in",
+        "startup_mode.manual": "Open the recorder manually",
+    }
+)
+
 
 def normalize_language(language: str | None) -> str:
     if language in SUPPORTED_LANGUAGES:

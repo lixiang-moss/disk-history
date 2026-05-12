@@ -6,8 +6,10 @@ from PySide6.QtCore import QDateTime
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
+import disk_history.app as app_module
 from disk_history.app import MainWindow
 from disk_history.settings import load_settings
+from disk_history.startup import startup_shortcut_path
 
 
 def test_gui_saves_runtime_settings(monkeypatch, tmp_path):
@@ -31,6 +33,40 @@ def test_gui_saves_runtime_settings(monkeypatch, tmp_path):
     assert settings.alert_window_minutes == 45
     assert settings.alert_growth_threshold_mb == 2048
     assert window.settings_status_label.text()
+
+    window.close()
+    app.processEvents()
+
+
+def test_gui_saves_startup_mode_choice(monkeypatch, tmp_path):
+    monkeypatch.setenv("DISK_HISTORY_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("DISK_HISTORY_STARTUP_DIR", str(tmp_path / "startup"))
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+
+    def fake_enable_start_on_login():
+        shortcut = startup_shortcut_path()
+        shortcut.parent.mkdir(parents=True, exist_ok=True)
+        shortcut.write_text("shortcut", encoding="utf-8")
+        return shortcut
+
+    monkeypatch.setattr(app_module, "enable_start_on_login", fake_enable_start_on_login)
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    window.startup_mode_combo.setCurrentIndex(window.startup_mode_combo.findData("auto"))
+    window.save_runtime_settings()
+
+    settings = load_settings(create_if_missing=False)
+    assert settings.start_on_login is True
+    assert startup_shortcut_path().exists()
+
+    window.startup_mode_combo.setCurrentIndex(window.startup_mode_combo.findData("manual"))
+    window.save_runtime_settings()
+
+    settings = load_settings(create_if_missing=False)
+    assert settings.start_on_login is False
+    assert not startup_shortcut_path().exists()
 
     window.close()
     app.processEvents()

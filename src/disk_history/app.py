@@ -512,6 +512,13 @@ class MainWindow(QMainWindow):
         self.background_interval_spin.setValue(self.settings.background_snapshot_interval_minutes)
         settings_form.addRow(self.t("label.background_interval_edit"), self.background_interval_spin)
 
+        self.startup_mode_combo = QComboBox()
+        self.startup_mode_combo.addItem(self.t("startup_mode.auto"), "auto")
+        self.startup_mode_combo.addItem(self.t("startup_mode.manual"), "manual")
+        current_startup_mode = "auto" if is_start_on_login_enabled() else "manual"
+        self.startup_mode_combo.setCurrentIndex(self.startup_mode_combo.findData(current_startup_mode))
+        settings_form.addRow(self.t("label.startup_mode"), self.startup_mode_combo)
+
         self.log_directory_edit = QLineEdit(self.settings.log_directory)
         log_directory_widget = QWidget()
         log_directory_row = QHBoxLayout(log_directory_widget)
@@ -550,15 +557,7 @@ class MainWindow(QMainWindow):
             self.t("label.log_directory_resolved", path=resolved_log_directory(self.settings))
         )
         layout.addWidget(self.log_directory_resolved_label)
-        startup_row = QHBoxLayout()
-        self.enable_startup_button = QPushButton(self.t("button.enable_startup"))
-        self.enable_startup_button.clicked.connect(self.enable_startup)
-        self.disable_startup_button = QPushButton(self.t("button.disable_startup"))
-        self.disable_startup_button.clicked.connect(self.disable_startup)
-        startup_row.addWidget(self.enable_startup_button)
-        startup_row.addWidget(self.disable_startup_button)
-        startup_row.addStretch(1)
-        layout.addLayout(startup_row)
+        layout.addWidget(QLabel(self.t("label.startup_mode_help")))
 
         self.privacy_text = QTextEdit()
         self.privacy_text.setReadOnly(True)
@@ -1131,8 +1130,11 @@ class MainWindow(QMainWindow):
             if enabled
             else self.t("label.startup_status_disabled")
         )
-        self.enable_startup_button.setEnabled(not enabled)
-        self.disable_startup_button.setEnabled(enabled)
+        if hasattr(self, "startup_mode_combo"):
+            wanted_mode = "auto" if enabled else "manual"
+            index = self.startup_mode_combo.findData(wanted_mode)
+            if index >= 0:
+                self.startup_mode_combo.setCurrentIndex(index)
 
     def _excluded_roots(self):
         return default_excluded_roots(
@@ -1333,6 +1335,20 @@ class MainWindow(QMainWindow):
         focus_targets = self._focus_targets_from_table()
         if focus_targets is None:
             return
+        selected_startup_mode = str(self.startup_mode_combo.currentData())
+        start_on_login = selected_startup_mode == "auto"
+        current_start_on_login = is_start_on_login_enabled()
+        if start_on_login != current_start_on_login:
+            try:
+                if start_on_login:
+                    enable_start_on_login()
+                else:
+                    disable_start_on_login()
+            except (OSError, RuntimeError) as exc:
+                self.startup_status_label.setText(
+                    self.t("label.startup_status_error", message=str(exc))
+                )
+                return
 
         was_monitoring = self.watcher is not None and self.watcher.is_running
         if was_monitoring:
@@ -1348,9 +1364,11 @@ class MainWindow(QMainWindow):
             enable_growth_alerts=self.enable_growth_alerts_check.isChecked(),
             alert_window_minutes=self.alert_window_spin.value(),
             alert_growth_threshold_mb=self.alert_threshold_spin.value(),
+            start_on_login=start_on_login,
         )
         save_settings(self.settings)
         self.settings_status_label.setText(self.t("label.settings_saved"))
+        self._refresh_startup_status()
         self.log_directory_resolved_label.setText(
             self.t("label.log_directory_resolved", path=resolved_log_directory(self.settings))
         )
