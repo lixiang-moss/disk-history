@@ -582,3 +582,27 @@ https://github.com/lixiang-moss/disk-history
 - `python -m pytest`：58 个测试全部通过。
 - `python -m ruff check .`：代码检查通过。
 - 离屏导入 `MainWindow`：GUI 主窗口模块可以初始化。
+## 2026-05-12：后台托盘退出
+
+本次修正一个长期运行体验问题：当后台记录用 `pythonw.exe` 启动后，用户不会看到控制台窗口，也就不能再用 `Ctrl+C` 退出后台程序。如果没有托盘退出入口，后台记录只能通过任务管理器结束，这不符合桌面工具的基本预期。
+
+实现选择：
+
+- `TrayNotifier` 增加右键菜单，第一版只放一个“退出 Disk History”动作。
+- `TrayNotifier` 接收 `on_quit` 回调。托盘菜单点击后不直接操作后台对象，而是调用回调，把停止决策交给后台记录器。
+- `BackgroundRecorder` 增加 `stop_requested` 标志和 `request_stop()` 方法。
+- `run_forever()` 不再是只能靠 `KeyboardInterrupt` 中断的无限循环，而是在每次循环前检查 `stop_requested`。
+- 两次采样之间不再一次性 `sleep(60)`，而是按短间隔等待，并在等待期间调用 `notifier.process_events()`，让托盘菜单点击有机会被 Qt 处理。
+- `finally` 中继续调用 `recorder.stop()` 和 `database.close()`，保证实时监听和数据库连接正常收尾。
+
+开发流程说明：
+
+- 先把“退出请求”和“资源收尾”分开。托盘菜单只发出退出请求，后台循环自己决定什么时候停止。
+- 再把长睡眠拆成短等待。原因是 Qt 托盘菜单依赖事件循环，如果后台线程长时间睡眠且不处理事件，菜单点击可能没有响应。
+- 最后补测试，验证后台循环能通过 `request_stop()` 正常退出，托盘退出回调会被调用。
+
+实际验证结果：
+
+- `python -m pytest`：60 个测试全部通过。
+- `python -m ruff check .`：代码检查通过。
+- 离屏导入 `MainWindow`：GUI 主窗口模块可以初始化。

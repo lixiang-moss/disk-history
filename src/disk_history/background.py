@@ -45,6 +45,7 @@ class BackgroundRecorder:
         self.last_standard_snapshot_at: datetime | None = None
         self.last_noise_snapshot_at: datetime | None = None
         self.last_focus_snapshot_at: datetime | None = None
+        self.stop_requested = False
         self.watcher = DiskHistoryWatcher(
             database,
             settings.monitor_rules,
@@ -161,14 +162,43 @@ class BackgroundRecorder:
     def stop(self) -> None:
         self.watcher.stop()
 
-    def run_forever(self, notifier: TrayNotifier | None = None) -> None:
+    def request_stop(self) -> None:
+        self.stop_requested = True
+
+    def run_forever(
+        self,
+        notifier: TrayNotifier | None = None,
+        *,
+        capture_interval_seconds: float = 60,
+        event_poll_seconds: float = 0.5,
+    ) -> None:
         self.start_live_monitoring()
         try:
-            while True:
+            while not self.stop_requested:
                 self.capture_once(notifier)
-                time.sleep(60)
+                self._wait_between_captures(
+                    notifier,
+                    capture_interval_seconds=capture_interval_seconds,
+                    event_poll_seconds=event_poll_seconds,
+                )
         finally:
             self.stop()
+
+    def _wait_between_captures(
+        self,
+        notifier: TrayNotifier | None,
+        *,
+        capture_interval_seconds: float,
+        event_poll_seconds: float,
+    ) -> None:
+        deadline = time.monotonic() + capture_interval_seconds
+        while not self.stop_requested:
+            if notifier is not None:
+                notifier.process_events()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(event_poll_seconds, remaining))
 
 
 def focus_roots_from_settings(settings: AppSettings) -> tuple[Path, ...]:
@@ -180,11 +210,13 @@ def run_background() -> int:
     database = DiskHistoryDatabase()
     database.initialize()
     recorder = BackgroundRecorder(database, settings)
-    notifier = TrayNotifier()
+    notifier = TrayNotifier(on_quit=recorder.request_stop)
     try:
         recorder.run_forever(notifier)
     except KeyboardInterrupt:
-        recorder.stop()
+        recorder.request_stop()
     finally:
+        notifier.close()
+        recorder.stop()
         database.close()
     return 0
